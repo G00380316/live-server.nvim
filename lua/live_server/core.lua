@@ -1,6 +1,6 @@
 -- Core logic for starting, stopping, and managing server processes.
 
-local utils = require("live-server.nvim.utils")
+local utils = require("live_server.utils")
 
 local M = {}
 

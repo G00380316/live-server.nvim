@@ -1,7 +1,7 @@
 -- All UI-related functions, such as floating windows and prompts.
 
-local core = require("live-server.nvim.core")
-local utils = require("live-server.nvim.utils")
+local core = require("live_server.core")
+local utils = require("live_server.utils")
 
 local M = {}
 
@@ -37,9 +37,15 @@ function M.list_servers()
     local width = 60
     local height = #lines + 2
     local win_opts = {
-        relative = 'editor', width = width, height = height,
-        col = (vim.o.columns - width) / 2, row = (vim.o.lines - height) / 2,
-        style = 'minimal', border = 'rounded', title = 'Running Servers', title_pos = 'center',
+        relative = 'editor',
+        width = width,
+        height = height,
+        col = (vim.o.columns - width) / 2,
+        row = (vim.o.lines - height) / 2,
+        style = 'minimal',
+        border = 'rounded',
+        title = 'Running Servers',
+        title_pos = 'center',
     }
     local win = vim.api.nvim_open_win(buf, true, win_opts)
     vim.api.nvim_win_set_option(win, 'winhl', 'Normal:NormalFloat')
@@ -75,4 +81,3 @@ function M.statusline()
 end
 
 return M
-

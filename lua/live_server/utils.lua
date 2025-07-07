@@ -29,7 +29,7 @@ function M.open_in_browser(server_type)
         cmd = "xdg-open"
     elseif os == "Darwin" then -- macOS
         cmd = "open"
-    else -- A reasonable fallback for Windows/WSL
+    else                       -- A reasonable fallback for Windows/WSL
         cmd = "explorer.exe"
     end
     vim.fn.jobstart(string.format("%s %s", cmd, url), { detach = true })

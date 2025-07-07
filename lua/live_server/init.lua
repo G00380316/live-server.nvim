@@ -1,6 +1,6 @@
-local core = require("live-server.nvim.core")
-local ui = require("live-server.nvim.ui")
-local utils = require("live-server.nvim.utils")
+local core = require("live_server.core")
+local ui = require("live_server.ui")
+local utils = require("live_server.utils")
 
 local M = {}
 

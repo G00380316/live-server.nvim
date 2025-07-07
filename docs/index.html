@@ -127,7 +127,7 @@
   'G00380316/live-server.nvim',
   lazy = false,
   config = function()
-    require("live-server.nvim").setup({})
+    require("live_server").setup({})
   end,
 }</code></pre>
                                 <button class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
@@ -137,7 +137,7 @@
                              <h3 class="text-lg font-semibold text-slate-800 mb-2">Default Configuration</h3>
                             <p class="text-slate-600 mb-4">Pass a configuration table to the `setup()` function to override the defaults. Most users won't need to change anything.</p>
                              <div class="code-container bg-slate-800 rounded-lg overflow-hidden">
-                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code class="code-block">require("live-server.nvim").setup({
+                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code class="code-block">require("live_server").setup({
   browser_sync_port = 3000,
   live_server_port = 8080,
   files_to_watch = '"*.html, *.css, *.js"',
@@ -153,17 +153,17 @@
                                 <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code class="code-block">keys = {
   {
     "<leader>sl",
-    function() require("live-server.nvim.core").toggle_live_server() end,
+    function() require("live_server.core").toggle_live_server() end,
     desc = "Toggle Live Server"
   },
   {
     "<leader>sb",
-    function() require("live-server.nvim.core").toggle_browser_sync() end,
+    function() require("live_server.core").toggle_browser_sync() end,
     desc = "Toggle BrowserSync"
   },
   {
     "<leader>sL",
-    function() require("live-server.nvim.ui").list_servers() end,
+    function() require("live_server.ui").list_servers() end,
     desc = "List Live Servers"
   },
 }</code></pre>

@@ -45,7 +45,7 @@ A modern, feature-rich live server plugin for Neovim with UI enhancements, state
 
 You can pass a configuration table to the setup() function. The following are the default values:
 ``` lua
-require("live-server.nvim").setup({
+require("live_server").setup({
   browser_sync_port = 3000,
   live_server_port = 8080,
   files_to_watch = '"*.html, *.css, *.js"',
@@ -62,17 +62,17 @@ For the best experience, it is highly recommended to set keymaps for the most co
 keys = {
   {
     "<leader>sl",
-    function() require("live-server.nvim.core").toggle_live_server() end,
+    function() require("live_server.core").toggle_live_server() end,
     desc = "Toggle Live Server"
   },
   {
     "<leader>sb",
-    function() require("live-server.nvim.core").toggle_browser_sync() end,
+    function() require("live_server.core").toggle_browser_sync() end,
     desc = "Toggle BrowserSync"
   },
   {
     "<leader>sL",
-    function() require("live-server.nvim.ui").list_servers() end,
+    function() require("live_server.ui").list_servers() end,
     desc = "List Live Servers"
   },
 }

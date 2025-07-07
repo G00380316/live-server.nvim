@@ -15,7 +15,7 @@ function M.get_project_root()
 end
 
 function M.open_in_browser(server_type)
-    local core = require("live-server.nvim.core")
+    local core = require("live_server.core")
     local server_state = core.State[server_type]
     if not server_state then
         M.notify(string.format("Server '%s' is not running.", server_type), vim.log.levels.WARN)

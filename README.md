@@ -21,8 +21,7 @@ A modern, feature-rich live server plugin for Neovim with UI enhancements, state
 ```lua
 {
   -- Make sure this path points to your local plugin directory
-  'your-username/live-server.nvim',
-  dir = '~/path/to/your/plugins/live-server.nvim',
+  'G00380316/live-server.nvim',
   lazy = false, -- Recommended to ensure VimLeave cleanup always runs
   config = function()
     require("live-server.nvim").setup({

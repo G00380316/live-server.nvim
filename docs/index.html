@@ -1,6 +1,6 @@
+
 <!DOCTYPE html>
 <html lang="en" class="scroll-smooth">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -16,7 +16,6 @@
             background-color: #f8fafc;
             color: #1e293b;
         }
-
         .chart-container {
             position: relative;
             width: 100%;
@@ -26,7 +25,6 @@
             height: 300px;
             max-height: 400px;
         }
-
         @media (min-width: 768px) {
             .chart-container {
                 height: 350px;
@@ -34,7 +32,6 @@
         }
     </style>
 </head>
-
 <body class="antialiased">
 
     <header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-slate-200">
@@ -45,13 +42,9 @@
                 </div>
                 <div class="hidden md:block">
                     <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="#features"
-                            class="text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium">Features</a>
-                        <a href="#start"
-                            class="text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium">Get
-                            Started</a>
-                        <a href="#commands"
-                            class="text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium">Commands</a>
+                        <a href="#features" class="text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium">Features</a>
+                        <a href="#start" class="text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium">Get Started</a>
+                        <a href="#commands" class="text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium">Commands</a>
                     </div>
                 </div>
             </div>
@@ -62,13 +55,9 @@
         <section id="hero" class="py-20 md:py-32 bg-white">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
                 <h1 class="text-4xl md:text-6xl font-extrabold text-slate-900 tracking-tight">live-server.nvim</h1>
-                <p class="mt-4 max-w-2xl mx-auto text-lg text-slate-600">A modern, feature-rich live server plugin for
-                    Neovim, designed for web development. It manages background server processes, provides a clean UI,
-                    and integrates seamlessly into your workflow.</p>
+                <p class="mt-4 max-w-2xl mx-auto text-lg text-slate-600">A modern, feature-rich live server plugin for Neovim, designed for web development. It manages background server processes, provides a clean UI, and integrates seamlessly into your workflow.</p>
                 <div class="mt-8">
-                    <a href="#start"
-                        class="inline-block bg-slate-800 text-white font-semibold px-6 py-3 rounded-md hover:bg-slate-700 transition-colors">Get
-                        Started</a>
+                    <a href="#start" class="inline-block bg-slate-800 text-white font-semibold px-6 py-3 rounded-md hover:bg-slate-700 transition-colors">Get Started</a>
                 </div>
             </div>
         </section>
@@ -77,134 +66,108 @@
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="text-center">
                     <h2 class="text-3xl font-bold tracking-tight text-slate-900">Why Use live-server.nvim?</h2>
-                    <p class="mt-2 max-w-2xl mx-auto text-lg text-slate-600">Explore the features that make this plugin
-                        a powerful companion for any web developer using Neovim.</p>
+                    <p class="mt-2 max-w-2xl mx-auto text-lg text-slate-600">Explore the features that make this plugin a powerful companion for any web developer using Neovim.</p>
                 </div>
                 <div class="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
                     <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🔄
-                        </div>
+                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🔄</div>
                         <h3 class="mt-5 text-lg font-semibold text-slate-900">Toggle Servers</h3>
-                        <p class="mt-2 text-base text-slate-600">Start and stop `live-server` and `browser-sync` with a
-                            single, simple command.</p>
+                        <p class="mt-2 text-base text-slate-600">Start and stop `live-server` and `browser-sync` with a single, simple command.</p>
                     </div>
                     <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🧠
-                        </div>
+                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🧠</div>
                         <h3 class="mt-5 text-lg font-semibold text-slate-900">State Management</h3>
-                        <p class="mt-2 text-base text-slate-600">Reliably tracks running servers to prevent duplicates
-                            and ensure clean shutdowns every time.</p>
+                        <p class="mt-2 text-base text-slate-600">Reliably tracks running servers to prevent duplicates and ensure clean shutdowns every time.</p>
                     </div>
                     <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">📋
-                        </div>
+                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">📋</div>
                         <h3 class="mt-5 text-lg font-semibold text-slate-900">UI Lister & Prompts</h3>
-                        <p class="mt-2 text-base text-slate-600">View all active servers in a clean floating window, or
-                            enter a port manually via a UI prompt.</p>
+                        <p class="mt-2 text-base text-slate-600">View all active servers in a clean floating window, or enter a port manually via a UI prompt.</p>
                     </div>
                     <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🚀
-                        </div>
+                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🚀</div>
                         <h3 class="mt-5 text-lg font-semibold text-slate-900">Auto-Open Browser</h3>
-                        <p class="mt-2 text-base text-slate-600">Automatically opens your default browser to the correct
-                            page the moment a server starts.</p>
+                        <p class="mt-2 text-base text-slate-600">Automatically opens your default browser to the correct page the moment a server starts.</p>
                     </div>
                     <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">📁
-                        </div>
+                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">📁</div>
                         <h3 class="mt-5 text-lg font-semibold text-slate-900">Smart Directory Detection</h3>
-                        <p class="mt-2 text-base text-slate-600">Intelligently runs in your project root (`.git`) or
-                            defaults to the current file's directory.</p>
+                        <p class="mt-2 text-base text-slate-600">Intelligently runs in your project root (`.git`) or defaults to the current file's directory.</p>
                     </div>
                     <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🧼
-                        </div>
+                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🧼</div>
                         <h3 class="mt-5 text-lg font-semibold text-slate-900">Automatic Cleanup</h3>
-                        <p class="mt-2 text-base text-slate-600">Kills all running server instances automatically when
-                            you exit Neovim, leaving nothing behind.</p>
+                        <p class="mt-2 text-base text-slate-600">Kills all running server instances automatically when you exit Neovim, leaving nothing behind.</p>
                     </div>
                 </div>
             </div>
         </section>
-
+        
         <section id="start" class="py-16 bg-white">
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="text-center">
                     <h2 class="text-3xl font-bold tracking-tight text-slate-900">Get Started</h2>
-                    <p class="mt-2 max-w-2xl mx-auto text-lg text-slate-600">Installing and configuring the plugin is
-                        simple. Follow the steps below to integrate `live-server.nvim` into your workflow.</p>
+                    <p class="mt-2 max-w-2xl mx-auto text-lg text-slate-600">Installing and configuring the plugin is simple. Follow the steps below to integrate `live-server.nvim` into your workflow.</p>
                 </div>
 
                 <div class="mt-12 max-w-4xl mx-auto">
                     <div class="mb-4 border-b border-slate-200">
                         <nav id="tabs" class="-mb-px flex space-x-4" aria-label="Tabs">
-                            <button
-                                class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-800 border-slate-800">Installation</button>
-                            <button
-                                class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300">Configuration</button>
-                            <button
-                                class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300">Keymaps</button>
+                            <button class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-800 border-slate-800">Installation</button>
+                            <button class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300">Configuration</button>
+                            <button class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300">Keymaps</button>
                         </nav>
                     </div>
                     <div id="tab-content">
                         <div class="tab-pane">
                             <h3 class="text-lg font-semibold text-slate-800 mb-2">Using Lazy.nvim</h3>
-                            <p class="text-slate-600 mb-4">Place the `live-server.nvim` directory in your config path
-                                and add the following spec to your `lazy.nvim` setup.</p>
+                            <p class="text-slate-600 mb-4">Place the `live-server.nvim` directory in your config path and add the following spec to your `lazy.nvim` setup.</p>
                             <div class="code-container bg-slate-800 rounded-lg overflow-hidden">
-                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code
-                                        class="code-block">{
-                                        'G00380316/live-server.nvim',
-                                        lazy = false,
-                                        config = function()
-                                        require("live-server.nvim").setup({})
-                                        end,
-                                        }</code></pre>
-                                <button
-                                    class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
+                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code class="code-block">{
+  'G00380316/live-server.nvim',
+  lazy = false,
+  config = function()
+    require("live-server.nvim").setup({})
+  end,
+}</code></pre>
+                                <button class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
                             </div>
                         </div>
                         <div class="tab-pane hidden">
-                            <h3 class="text-lg font-semibold text-slate-800 mb-2">Default Configuration</h3>
-                            <p class="text-slate-600 mb-4">Pass a configuration table to the `setup()` function to
-                                override the defaults. Most users won't need to change anything.</p>
-                            <div class="code-container bg-slate-800 rounded-lg overflow-hidden">
-                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code
-                                        class="code-block">require("live-server.nvim").setup({
-                                        browser_sync_port = 3000,
-                                        live_server_port = 8080,
-                                        files_to_watch = '"*.html, *.css, *.js"',
-                                        auto_open_browser = true,
-                                        })</code></pre>
-                                <button
-                                    class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
+                             <h3 class="text-lg font-semibold text-slate-800 mb-2">Default Configuration</h3>
+                            <p class="text-slate-600 mb-4">Pass a configuration table to the `setup()` function to override the defaults. Most users won't need to change anything.</p>
+                             <div class="code-container bg-slate-800 rounded-lg overflow-hidden">
+                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code class="code-block">require("live-server.nvim").setup({
+  browser_sync_port = 3000,
+  live_server_port = 8080,
+  files_to_watch = '"*.html, *.css, *.js"',
+  auto_open_browser = true,
+})</code></pre>
+                                <button class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
                             </div>
                         </div>
                         <div class="tab-pane hidden">
                             <h3 class="text-lg font-semibold text-slate-800 mb-2">Recommended Keymaps</h3>
-                            <p class="text-slate-600 mb-4">For the best experience, add these keymaps to your
-                                `lazy.nvim` spec to quickly access the most common features.</p>
-                            <div class="code-container bg-slate-800 rounded-lg overflow-hidden">
-                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code
-                                        class="code-block">keys = {
-                                        {
-                                        "<leader>sl",
-                                            function() require("live-server.nvim.core").toggle_live_server() end,
-                                            desc = "Toggle Live Server"
-                                            },
-                                            {
-                                            "<leader>sb",
-                                                function() require("live-server.nvim.core").toggle_browser_sync() end,
-                                                desc = "Toggle BrowserSync"
-                                                },
-                                                {
-                                                "<leader>sL",
-                                                    function() require("live-server.nvim.ui").list_servers() end,
-                                                    desc = "List Live Servers"
-                                                    },
-                                                    }</code></pre>
-                                <button
-                                    class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
+                            <p class="text-slate-600 mb-4">For the best experience, add these keymaps to your `lazy.nvim` spec to quickly access the most common features.</p>
+                             <div class="code-container bg-slate-800 rounded-lg overflow-hidden">
+                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code class="code-block">keys = {
+  {
+    "<leader>sl",
+    function() require("live-server.nvim.core").toggle_live_server() end,
+    desc = "Toggle Live Server"
+  },
+  {
+    "<leader>sb",
+    function() require("live-server.nvim.core").toggle_browser_sync() end,
+    desc = "Toggle BrowserSync"
+  },
+  {
+    "<leader>sL",
+    function() require("live-server.nvim.ui").list_servers() end,
+    desc = "List Live Servers"
+  },
+}</code></pre>
+                                <button class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
                             </div>
                         </div>
                     </div>
@@ -216,12 +179,11 @@
             <div class="container mx-auto px-4 sm:px-6 lg:px-8">
                 <div class="text-center">
                     <h2 class="text-3xl font-bold tracking-tight text-slate-900">Functional Overview</h2>
-                    <p class="mt-2 max-w-2xl mx-auto text-lg text-slate-600">The plugin's commands are designed for
-                        specific tasks. This chart provides a high-level breakdown of the available functionality.</p>
+                    <p class="mt-2 max-w-2xl mx-auto text-lg text-slate-600">The plugin's commands are designed for specific tasks. This chart provides a high-level breakdown of the available functionality.</p>
                 </div>
                 <div class="mt-12 flex flex-col lg:flex-row items-center gap-8">
                     <div class="w-full lg:w-1/2">
-                        <div class="chart-container">
+                         <div class="chart-container">
                             <canvas id="commandsChart"></canvas>
                         </div>
                     </div>
@@ -229,27 +191,24 @@
                         <div class="space-y-4">
                             <div>
                                 <h3 class="text-lg font-semibold text-slate-800">Toggle Commands</h3>
-                                <p class="text-slate-600">Start and stop servers. The core functionality of the plugin.
-                                </p>
+                                <p class="text-slate-600">Start and stop servers. The core functionality of the plugin.</p>
                                 <ul class="list-disc list-inside mt-2 text-slate-600">
                                     <li><code>:LiveServerToggle [port]</code></li>
                                     <li><code>:BrowserSyncToggle [port]</code></li>
                                 </ul>
                             </div>
-                            <div>
+                             <div>
                                 <h3 class="text-lg font-semibold text-slate-800">UI Commands</h3>
-                                <p class="text-slate-600">Interact with the plugin through floating windows and prompts.
-                                </p>
+                                <p class="text-slate-600">Interact with the plugin through floating windows and prompts.</p>
                                 <ul class="list-disc list-inside mt-2 text-slate-600">
                                     <li><code>:LiveServerList</code></li>
                                     <li><code>:LiveServerPrompt</code></li>
                                     <li><code>:BrowserSyncPrompt</code></li>
                                 </ul>
                             </div>
-                            <div>
+                             <div>
                                 <h3 class="text-lg font-semibold text-slate-800">Utility Commands</h3>
-                                <p class="text-slate-600">Convenience commands for common actions like opening a browser
-                                    tab.</p>
+                                <p class="text-slate-600">Convenience commands for common actions like opening a browser tab.</p>
                                 <ul class="list-disc list-inside mt-2 text-slate-600">
                                     <li><code>:LiveServerOpen</code></li>
                                     <li><code>:BrowserSyncOpen</code></li>
@@ -264,10 +223,7 @@
 
     <footer class="bg-white border-t border-slate-200">
         <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center text-slate-500">
-            <p>&copy; 2025 live-server.nvim. Feel free to contribute at <a
-                    href="https://github.com/G00380316/live-server.nvim"
-                    class="font-medium text-slate-700 hover:text-slate-900" target="_blank"
-                    rel="noopener noreferrer">GitHub</a>.</p>
+             <p>&copy; 2025 live-server.nvim. Feel free to contribute at <a href="https://github.com/G00380316/live-server.nvim" class="font-medium text-slate-700 hover:text-slate-900" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>
         </div>
     </footer>
 
@@ -280,7 +236,7 @@
                 tab.addEventListener('click', () => {
                     tabs.forEach(t => t.classList.remove('text-slate-800', 'border-slate-800'));
                     tabs.forEach(t => t.classList.add('text-slate-500', 'border-transparent', 'hover:text-slate-700', 'hover:border-slate-300'));
-
+                    
                     tab.classList.remove('text-slate-500', 'border-transparent', 'hover:text-slate-700', 'hover:border-slate-300');
                     tab.classList.add('text-slate-800', 'border-slate-800');
 
@@ -288,25 +244,25 @@
                     panes[index].classList.remove('hidden');
                 });
             });
-
+            
             const codeContainers = document.querySelectorAll('.code-container');
             codeContainers.forEach(container => {
                 container.style.position = 'relative';
             });
-
+            
             const copyButtons = document.querySelectorAll('.copy-btn');
             copyButtons.forEach(button => {
                 button.addEventListener('click', () => {
                     const codeBlock = button.previousElementSibling.querySelector('.code-block');
                     const textToCopy = codeBlock.innerText;
-
+                    
                     const textArea = document.createElement('textarea');
                     textArea.value = textToCopy;
                     document.body.appendChild(textArea);
                     textArea.select();
                     document.execCommand('copy');
                     document.body.removeChild(textArea);
-
+                    
                     const originalText = button.innerText;
                     button.innerText = 'Copied!';
                     setTimeout(() => {
@@ -349,7 +305,7 @@
                         },
                         tooltip: {
                             callbacks: {
-                                label: function (context) {
+                                label: function(context) {
                                     let label = context.label || '';
                                     if (label) {
                                         label += ': ';
@@ -368,5 +324,4 @@
     </script>
 
 </body>
-
 </html>

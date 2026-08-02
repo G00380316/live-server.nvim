@@ -1,155 +1,120 @@
-
-local utils = require("live_server.utils")
+---@mod live_server.core Deprecated pre-1.0 API
+---
+--- Kept so existing keymaps such as
+--- `require("live_server.core").toggle_live_server()` keep working. Each entry
+--- forwards to the current API and warns once. New code should use
+--- `require("live_server")`.
 
 local M = {}
 
-M.State = {}
+---@type table<string, boolean>
+local warned = {}
 
-local config = {}
+---@param old string
+---@param new string
+local function deprecate(old, new)
+  if warned[old] then
+    return
+  end
+  warned[old] = true
+  vim.schedule(function()
+    vim.notify_once(
+      ("live-server.nvim: `live_server.core.%s` is deprecated, use `%s`"):format(old, new),
+      vim.log.levels.WARN,
+      { title = "Live Server" }
+    )
+  end)
+end
 
+---@param opts? table
 function M.init(opts)
-    config = vim.tbl_deep_extend("force", {
-        browser_sync_port = 3000,
-        live_server_port = 8080,
-        files_to_watch = '"*.html, *.css, *.js"',
-        auto_open_browser = true,
-    }, opts or {})
+  deprecate("init", 'require("live_server").setup()')
+  require("live_server").setup(opts)
 end
 
-local function is_port_in_use(port_to_check)
-    for project_root, project_state in pairs(M.State) do
-        if project_state.live_server and project_state.live_server.port == port_to_check then
-            return true, vim.fn.fnamemodify(project_root, ":t")
-        end
-        if project_state.browser_sync and project_state.browser_sync.port == port_to_check then
-            return true, vim.fn.fnamemodify(project_root, ":t")
-        end
-    end
-    return false, nil
-end
-
-function M.get_project_state(project_root)
-    if not M.State[project_root] then
-        M.State[project_root] = { live_server = nil, browser_sync = nil }
-    end
-    return M.State[project_root]
-end
-
+---@param port? integer|string
 function M.start_live_server(port)
-    local project_root = utils.get_project_root()
-    local project_state = M.get_project_state(project_root)
-
-    if project_state.live_server then
-        utils.notify("Live Server is already running for this project.", vim.log.levels.WARN)
-        return
-    end
-
-    local port_num = tonumber(port) or config.live_server_port
-
-    local in_use, project_name = is_port_in_use(port_num)
-    if in_use then
-        utils.notify("Port " .. port_num .. " is in use by '" .. project_name .. "'.", vim.log.levels.WARN)
-        require("live_server.ui").start_server_with_prompt('live_server')
-        return
-    end
-
-    vim.fn.system("live-server --help")
-    if vim.v.shell_error ~= 0 then
-	   utils.notify("Failed to execute live-server. Maybe you didn't downloaded it?",vim.log.levels.ERROR)
-	   vim.fn.getchar()
-	   return
-    end
-
-    local cmd = string.format("live-server --port=%d", port_num)
-    local job_id = vim.fn.jobstart(cmd, { detach = true, cwd = project_root })
-
-    if job_id > 0 then
-        project_state.live_server = { pid = job_id, port = port_num, cwd = project_root }
-	 utils.notify("Live Server started for '" .. vim.fn.fnamemodify(project_root, ":t") .. "' on port " .. port_num)
-        if config.auto_open_browser then
-            vim.defer_fn(function() utils.open_in_browser('live_server') end, 1000)
-        end
-    else
-        utils.notify("Failed to start Live Server. Is the port available?", vim.log.levels.ERROR)
-    end
+  deprecate("start_live_server", 'require("live_server").start({ adapter = "live_server" })')
+  require("live_server.manager").start({ adapter = "live_server", port = port })
 end
 
 function M.kill_live_server()
-    local project_root = utils.get_project_root()
-    local project_state = M.get_project_state(project_root)
-    if not project_state.live_server then return end
-
-    vim.fn.jobstop(project_state.live_server.pid)
-    utils.notify("Live Server on port " .. project_state.live_server.port .. " terminated.")
-    project_state.live_server = nil
+  deprecate("kill_live_server", 'require("live_server").stop()')
+  local manager = require("live_server.manager")
+  local server = manager.find_active(require("live_server.project").get().root, "live_server")
+  if server then
+    manager.stop(server)
+  end
 end
 
+---@param port? integer|string
 function M.start_browser_sync(port)
-    local project_root = utils.get_project_root()
-    local project_state = M.get_project_state(project_root)
-
-    if project_state.browser_sync then
-        utils.notify("BrowserSync is already running for this project.", vim.log.levels.WARN)
-        return
-    end
-
-    local port_num = tonumber(port) or config.browser_sync_port
-
-    local in_use, project_name = is_port_in_use(port_num)
-    if in_use then
-        utils.notify("Port " .. port_num .. " is in use by '" .. project_name .. "'.", vim.log.levels.WARN)
-        require("live_server.ui").start_server_with_prompt('browser_sync')
-        return
-    end
-
-    local cmd = string.format("browser-sync start --no-notify --server --port=%d --files %s", port_num, config.files_to_watch)
-    local job_id = vim.fn.jobstart(cmd, { detach = true, cwd = project_root })
-
-    if job_id > 0 then
-        project_state.browser_sync = { pid = job_id, port = port_num, cwd = project_root }
-        utils.notify("BrowserSync started for '" .. vim.fn.fnamemodify(project_root, ":t") .. "' on port " .. port_num)
-        if config.auto_open_browser then
-            vim.defer_fn(function() utils.open_in_browser('browser_sync') end, 1000)
-        end
-    else
-        utils.notify("Failed to start BrowserSync. Is the port available?", vim.log.levels.ERROR)
-    end
+  deprecate("start_browser_sync", 'require("live_server").start({ adapter = "browser_sync" })')
+  require("live_server.manager").start({ adapter = "browser_sync", port = port })
 end
 
 function M.kill_browser_sync()
-    local project_root = utils.get_project_root()
-    local project_state = M.get_project_state(project_root)
-    if not project_state.browser_sync then return end
-
-    vim.fn.jobstop(project_state.browser_sync.pid)
-    utils.notify("BrowserSync server on port " .. project_state.browser_sync.port .. " terminated.")
-    project_state.browser_sync = nil
+  deprecate("kill_browser_sync", 'require("live_server").stop()')
+  local manager = require("live_server.manager")
+  local server = manager.find_active(require("live_server.project").get().root, "browser_sync")
+  if server then
+    manager.stop(server)
+  end
 end
 
+---@param port? integer|string
 function M.toggle_live_server(port)
-    local project_root = utils.get_project_root()
-    local project_state = M.get_project_state(project_root)
-    if project_state.live_server then M.kill_live_server() else M.start_live_server(port) end
+  deprecate("toggle_live_server", 'require("live_server").toggle({ adapter = "live_server" })')
+  require("live_server.manager").toggle({ adapter = "live_server", port = port })
 end
 
+---@param port? integer|string
 function M.toggle_browser_sync(port)
-    local project_root = utils.get_project_root()
-    local project_state = M.get_project_state(project_root)
-    if project_state.browser_sync then M.kill_browser_sync() else M.start_browser_sync(port) end
+  deprecate("toggle_browser_sync", 'require("live_server").toggle({ adapter = "browser_sync" })')
+  require("live_server.manager").toggle({ adapter = "browser_sync", port = port })
 end
 
 function M.kill_all_servers()
-    for _, project_state in pairs(M.State) do
-        if project_state.live_server then
-            vim.fn.jobstop(project_state.live_server.pid)
-        end
-        if project_state.browser_sync then
-            vim.fn.jobstop(project_state.browser_sync.pid)
-        end
-    end
-    M.State = {} -- Clear the state table
-    utils.notify("All managed server instances have been terminated.")
+  deprecate("kill_all_servers", 'require("live_server").stop_all()')
+  require("live_server.manager").stop_all()
 end
 
-return M
+---@param project_root? string
+---@return table
+function M.get_project_state(project_root)
+  deprecate("get_project_state", 'require("live_server").servers()')
+  local root = project_root or require("live_server.project").get().root
+  local state = { live_server = nil, browser_sync = nil }
+  for _, server in ipairs(require("live_server.manager").for_project(root, { active_only = true })) do
+    state[server.adapter.name] = { pid = server.pid, port = server.port, cwd = server.project.root }
+  end
+  return state
+end
 
+--- Legacy view of the old `State` table: a map of project root to
+--- `{ live_server = {...}, browser_sync = {...} }`.
+---
+--- This has to be a *real* table, not a metatable trick: `__pairs` is a Lua 5.2
+--- feature that LuaJIT does not implement, so any config doing
+--- `for root, state in pairs(core.State)` would silently see nothing. It is
+--- kept in sync from the event bus instead.
+---@type table<string, table>
+M.State = {}
+
+local function sync_state()
+  for key in pairs(M.State) do
+    M.State[key] = nil
+  end
+  for _, server in ipairs(require("live_server.manager").servers({ active_only = true })) do
+    local entry = M.State[server.project.root] or { live_server = nil, browser_sync = nil }
+    entry[server.adapter.name] = { pid = server.pid, port = server.port, cwd = server.project.root }
+    M.State[server.project.root] = entry
+  end
+end
+
+-- Requiring this module is itself the opt-in: nobody on the current API pays
+-- for the subscription.
+require("live_server.event").on("changed", sync_state)
+sync_state()
+
+return M

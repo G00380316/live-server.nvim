@@ -1,327 +1,431 @@
-
 <!DOCTYPE html>
-<html lang="en" class="scroll-smooth">
+<html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>live-server.nvim - Interactive Documentation</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <style>
-        body {
-            font-family: 'Inter', sans-serif;
-            background-color: #f8fafc;
-            color: #1e293b;
-        }
-        .chart-container {
-            position: relative;
-            width: 100%;
-            max-width: 400px;
-            margin-left: auto;
-            margin-right: auto;
-            height: 300px;
-            max-height: 400px;
-        }
-        @media (min-width: 768px) {
-            .chart-container {
-                height: 350px;
-            }
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>live-server.nvim — development server manager for Neovim</title>
+<meta name="description" content="Manage local development servers from Neovim: pin a port to a project, watch server output, and work reliably over SSH.">
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>⚡</text></svg>">
+<style>
+/*
+  Self-contained on purpose: no CDN scripts, no web fonts, no analytics.
+  The page works offline, cannot break when a third party does, and does not
+  hand a reader's IP address to anyone.
+*/
+:root {
+  --bg: #ffffff;
+  --bg-soft: #f6f7f9;
+  --bg-code: #f2f3f5;
+  --fg: #16181d;
+  --fg-soft: #545965;
+  --accent: #0b5cc4;
+  --accent-soft: #e7f0fd;
+  --border: #d9dce2;
+  --ok: #1a7f4b;
+  --radius: 10px;
+  --measure: 68ch;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0f1115;
+    --bg-soft: #161920;
+    --bg-code: #1b1f27;
+    --fg: #e6e8ec;
+    --fg-soft: #a6acb8;
+    --accent: #7fb0ff;
+    --accent-soft: #16233a;
+    --border: #2b303a;
+    --ok: #6cd39a;
+  }
+}
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
+}
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.65 ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-text-size-adjust: 100%;
+}
+.skip {
+  position: absolute; left: -9999px; top: 0;
+  background: var(--accent); color: #fff; padding: .6rem 1rem; z-index: 10;
+  border-radius: 0 0 var(--radius) 0; text-decoration: none;
+}
+.skip:focus { left: 0; }
+.wrap { max-width: 1000px; margin: 0 auto; padding: 0 1.25rem; }
+a { color: var(--accent); }
+a:focus-visible, summary:focus-visible {
+  outline: 3px solid var(--accent); outline-offset: 2px; border-radius: 3px;
+}
+header.site {
+  border-bottom: 1px solid var(--border);
+  position: sticky; top: 0; background: var(--bg); z-index: 5;
+}
+header.site .wrap {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 1rem; min-height: 56px; flex-wrap: wrap;
+}
+.brand { font-weight: 700; letter-spacing: -.01em; text-decoration: none; color: var(--fg); }
+nav ul { list-style: none; display: flex; gap: .25rem; margin: 0; padding: 0; flex-wrap: wrap; }
+nav a { display: inline-block; padding: .4rem .6rem; border-radius: 6px; text-decoration: none; color: var(--fg-soft); }
+nav a:hover { background: var(--bg-soft); color: var(--fg); }
+
+.hero { padding: 3.5rem 0 2.5rem; }
+h1 { font-size: clamp(1.9rem, 5vw, 2.9rem); line-height: 1.15; letter-spacing: -.02em; margin: 0 0 .5rem; }
+.tagline { font-size: 1.15rem; color: var(--fg-soft); max-width: var(--measure); margin: 0 0 1.5rem; }
+.cta { display: flex; gap: .75rem; flex-wrap: wrap; }
+.btn {
+  display: inline-block; padding: .6rem 1.1rem; border-radius: var(--radius);
+  text-decoration: none; font-weight: 600; border: 1px solid var(--border);
+}
+.btn-primary { background: var(--accent); color: #fff; border-color: transparent; }
+.btn-secondary { background: var(--bg-soft); color: var(--fg); }
+
+.term {
+  background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1rem 1.15rem; overflow-x: auto; margin: 2rem 0 0;
+}
+.term pre { margin: 0; font: 13.5px/1.6 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace; }
+.term .run { color: var(--ok); }
+.term .dim { color: var(--fg-soft); }
+.term .key { color: var(--accent); font-weight: 600; }
+
+section { padding: 2.75rem 0; border-top: 1px solid var(--border); }
+h2 { font-size: 1.55rem; letter-spacing: -.01em; margin: 0 0 .35rem; }
+h3 { font-size: 1.05rem; margin: 1.5rem 0 .35rem; }
+section > .wrap > p { color: var(--fg-soft); max-width: var(--measure); }
+
+.grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fit, minmax(255px, 1fr)); margin-top: 1.5rem; }
+.card { background: var(--bg-soft); border: 1px solid var(--border); border-radius: var(--radius); padding: 1.1rem 1.2rem; }
+.card h3 { margin: 0 0 .3rem; font-size: 1rem; }
+.card p { margin: 0; color: var(--fg-soft); font-size: .95rem; }
+
+pre.code {
+  background: var(--bg-code); border: 1px solid var(--border); border-radius: var(--radius);
+  padding: 1rem 1.15rem; overflow-x: auto;
+  font: 13.5px/1.6 ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
+}
+code { background: var(--bg-code); padding: .12em .38em; border-radius: 4px; font-size: .9em; }
+pre.code code { background: none; padding: 0; font-size: inherit; }
+kbd {
+  background: var(--bg-code); border: 1px solid var(--border); border-bottom-width: 2px;
+  border-radius: 5px; padding: .05em .4em; font: .85em ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+.table-scroll { overflow-x: auto; margin-top: 1rem; }
+table { border-collapse: collapse; width: 100%; font-size: .95rem; }
+th, td { text-align: left; padding: .55rem .7rem; border-bottom: 1px solid var(--border); vertical-align: top; }
+th { font-size: .78rem; text-transform: uppercase; letter-spacing: .05em; color: var(--fg-soft); }
+td code { white-space: nowrap; }
+
+.note {
+  border-left: 3px solid var(--accent); background: var(--accent-soft);
+  padding: .85rem 1.1rem; border-radius: 0 var(--radius) var(--radius) 0; margin-top: 1.25rem;
+}
+.note p { margin: 0; }
+
+footer.site { border-top: 1px solid var(--border); padding: 2rem 0 3rem; color: var(--fg-soft); font-size: .9rem; }
+</style>
 </head>
-<body class="antialiased">
+<body>
+<a class="skip" href="#main">Skip to content</a>
 
-    <header class="bg-white/80 backdrop-blur-md sticky top-0 z-50 border-b border-slate-200">
-        <nav class="container mx-auto px-4 sm:px-6 lg:px-8">
-            <div class="flex items-center justify-between h-16">
-                <div class="flex-shrink-0">
-                    <a href="#" class="text-xl font-bold text-slate-800">live-server.nvim</a>
-                </div>
-                <div class="hidden md:block">
-                    <div class="ml-10 flex items-baseline space-x-4">
-                        <a href="#features" class="text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium">Features</a>
-                        <a href="#start" class="text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium">Get Started</a>
-                        <a href="#commands" class="text-slate-600 hover:bg-slate-100 hover:text-slate-900 px-3 py-2 rounded-md text-sm font-medium">Commands</a>
-                    </div>
-                </div>
-            </div>
-        </nav>
-    </header>
+<header class="site">
+  <div class="wrap">
+    <a class="brand" href="#main">live-server.nvim</a>
+    <nav aria-label="Sections">
+      <ul>
+        <li><a href="#install">Install</a></li>
+        <li><a href="#commands">Commands</a></li>
+        <li><a href="#ports">Ports</a></li>
+        <li><a href="#ssh">SSH</a></li>
+        <li><a href="#security">Security</a></li>
+        <li><a href="#config">Config</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
 
-    <main>
-        <section id="hero" class="py-20 md:py-32 bg-white">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8 text-center">
-                <h1 class="text-4xl md:text-6xl font-extrabold text-slate-900 tracking-tight">live-server.nvim</h1>
-                <p class="mt-4 max-w-2xl mx-auto text-lg text-slate-600">A modern, feature-rich live server plugin for Neovim, designed for web development. It manages background server processes, provides a clean UI, and integrates seamlessly into your workflow.</p>
-                <div class="mt-8">
-                    <a href="#start" class="inline-block bg-slate-800 text-white font-semibold px-6 py-3 rounded-md hover:bg-slate-700 transition-colors">Get Started</a>
-                </div>
-            </div>
-        </section>
+<main id="main">
 
-        <section id="features" class="py-16">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="text-center">
-                    <h2 class="text-3xl font-bold tracking-tight text-slate-900">Why Use live-server.nvim?</h2>
-                    <p class="mt-2 max-w-2xl mx-auto text-lg text-slate-600">Explore the features that make this plugin a powerful companion for any web developer using Neovim.</p>
-                </div>
-                <div class="mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-3">
-                    <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🔄</div>
-                        <h3 class="mt-5 text-lg font-semibold text-slate-900">Toggle Servers</h3>
-                        <p class="mt-2 text-base text-slate-600">Start and stop `live-server` and `browser-sync` with a single, simple command.</p>
-                    </div>
-                    <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🧠</div>
-                        <h3 class="mt-5 text-lg font-semibold text-slate-900">State Management</h3>
-                        <p class="mt-2 text-base text-slate-600">Reliably tracks running servers to prevent duplicates and ensure clean shutdowns every time.</p>
-                    </div>
-                    <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">📋</div>
-                        <h3 class="mt-5 text-lg font-semibold text-slate-900">UI Lister & Prompts</h3>
-                        <p class="mt-2 text-base text-slate-600">View all active servers in a clean floating window, or enter a port manually via a UI prompt.</p>
-                    </div>
-                    <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🚀</div>
-                        <h3 class="mt-5 text-lg font-semibold text-slate-900">Auto-Open Browser</h3>
-                        <p class="mt-2 text-base text-slate-600">Automatically opens your default browser to the correct page the moment a server starts.</p>
-                    </div>
-                    <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">📁</div>
-                        <h3 class="mt-5 text-lg font-semibold text-slate-900">Smart Directory Detection</h3>
-                        <p class="mt-2 text-base text-slate-600">Intelligently runs in your project root (`.git`) or defaults to the current file's directory.</p>
-                    </div>
-                    <div class="p-6 bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow">
-                        <div class="flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 text-2xl">🧼</div>
-                        <h3 class="mt-5 text-lg font-semibold text-slate-900">Automatic Cleanup</h3>
-                        <p class="mt-2 text-base text-slate-600">Kills all running server instances automatically when you exit Neovim, leaving nothing behind.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-        
-        <section id="start" class="py-16 bg-white">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="text-center">
-                    <h2 class="text-3xl font-bold tracking-tight text-slate-900">Get Started</h2>
-                    <p class="mt-2 max-w-2xl mx-auto text-lg text-slate-600">Installing and configuring the plugin is simple. Follow the steps below to integrate `live-server.nvim` into your workflow.</p>
-                </div>
+<div class="hero wrap">
+  <h1>Start it, forget it, keep the same URL.</h1>
+  <p class="tagline">
+    A development server manager for Neovim. Start and stop servers, watch their output,
+    pin a port to a project so its URL never changes, and get sensible behaviour when
+    Neovim is running over SSH.
+  </p>
+  <div class="cta">
+    <a class="btn btn-primary" href="#install">Install</a>
+    <a class="btn btn-secondary" href="https://github.com/G00380316/live-server.nvim">Source on GitHub</a>
+  </div>
 
-                <div class="mt-12 max-w-4xl mx-auto">
-                    <div class="mb-4 border-b border-slate-200">
-                        <nav id="tabs" class="-mb-px flex space-x-4" aria-label="Tabs">
-                            <button class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-800 border-slate-800">Installation</button>
-                            <button class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300">Configuration</button>
-                            <button class="tab-btn whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm text-slate-500 border-transparent hover:text-slate-700 hover:border-slate-300">Keymaps</button>
-                        </nav>
-                    </div>
-                    <div id="tab-content">
-                        <div class="tab-pane">
-                            <h3 class="text-lg font-semibold text-slate-800 mb-2">Using Lazy.nvim</h3>
-                            <p class="text-slate-600 mb-4">Place the `live-server.nvim` directory in your config path and add the following spec to your `lazy.nvim` setup.</p>
-                            <div class="code-container bg-slate-800 rounded-lg overflow-hidden">
-                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code class="code-block">{
-  'G00380316/live-server.nvim',
-  lazy = false,
-  config = function()
-    require("live_server").setup({})
-  end,
+  <div class="term" role="img" aria-label="The manager panel: one running live-server for the portfolio project on port 5500, pinned, above a stopped browser-sync on port 3000, with a row of keyboard shortcuts below.">
+    <pre> <span class="run">1 running</span>
+
+  <span class="dim">~/code/portfolio</span>
+  <span class="run">●</span> live-server   running    :5500   up 12m   pinned
+     http://127.0.0.1:5500/index.html
+  <span class="dim">○ browser-sync  stopped    :3000</span>
+
+ <span class="key">&lt;CR&gt;</span> open  <span class="key">s</span> start/stop  <span class="key">r</span> restart  <span class="key">p</span> port  <span class="key">l</span> logs  <span class="key">?</span> help</pre>
+  </div>
+</div>
+
+<section id="why">
+  <div class="wrap">
+    <h2>Three papercuts, fixed</h2>
+    <p>The usual live-reload workflow works right up until it doesn’t.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>The URL kept moving</h3>
+        <p>Ports are pinned per project. Bookmarks, an open devtools session, a CORS
+        allowlist and a QR code taped to a test phone all keep working across restarts
+        and across machines.</p>
+      </div>
+      <div class="card">
+        <h3>“Running” didn’t mean reachable</h3>
+        <p>A browser opens only once the port actually accepts connections — not after a
+        fixed one-second guess. A server that spawns but never answers is reported as
+        such, not shown as healthy.</p>
+      </div>
+      <div class="card">
+        <h3>SSH quietly broke it</h3>
+        <p>Editing on a remote box means the server binds loopback over there. The plugin
+        detects it, hands you the exact <code>ssh -L</code> command, and copies the URL
+        to <em>your</em> clipboard over OSC&nbsp;52.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="install">
+  <div class="wrap">
+    <h2>Install</h2>
+    <p>Neovim 0.9+ and at least one backend. The plugin finds whichever you have.</p>
+
+    <pre class="code"><code>{
+  "G00380316/live-server.nvim",
+  cmd = "LiveServer",
+  keys = {
+    { "&lt;leader&gt;ls", "&lt;Cmd&gt;LiveServer toggle&lt;CR&gt;", desc = "Toggle live server" },
+    { "&lt;leader&gt;lm", "&lt;Cmd&gt;LiveServer&lt;CR&gt;",        desc = "Live server manager" },
+    { "&lt;leader&gt;lo", "&lt;Cmd&gt;LiveServer open&lt;CR&gt;",   desc = "Open in browser" },
+  },
+  opts = {},
 }</code></pre>
-                                <button class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
-                            </div>
-                        </div>
-                        <div class="tab-pane hidden">
-                             <h3 class="text-lg font-semibold text-slate-800 mb-2">Default Configuration</h3>
-                            <p class="text-slate-600 mb-4">Pass a configuration table to the `setup()` function to override the defaults. Most users won't need to change anything.</p>
-                             <div class="code-container bg-slate-800 rounded-lg overflow-hidden">
-                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code class="code-block">require("live_server").setup({
-  browser_sync_port = 3000,
-  live_server_port = 8080,
-  files_to_watch = '"*.html, *.css, *.js"',
-  auto_open_browser = true,
+
+    <h3>Backends</h3>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Backend</th><th scope="col">Install</th>
+            <th scope="col">Live reload</th><th scope="col">Notes</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><code>live_server</code></td><td><code>npm i -g live-server</code></td><td>Yes</td><td>Injects CSS without a page reload. Default.</td></tr>
+          <tr><td><code>browser_sync</code></td><td><code>npm i -g browser-sync</code></td><td>Yes</td><td>Syncs scroll, clicks and input across devices.</td></tr>
+          <tr><td><code>serve</code></td><td><code>npm i -g serve</code> or npx</td><td>No</td><td>Clean URLs, correct MIME types, production-like.</td></tr>
+          <tr><td><code>python</code></td><td>already installed</td><td>No</td><td>Zero-install fallback.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="note">
+      <p><code>opts = {}</code> is enough — every option has a working default, and the
+      plugin configures itself on first use if you never call <code>setup()</code> at
+      all. Run <code>:checkhealth live_server</code> to see what it found.</p>
+    </div>
+  </div>
+</section>
+
+<section id="commands">
+  <div class="wrap">
+    <h2>Commands</h2>
+    <p>One command with subcommands and real <kbd>Tab</kbd> completion. A bare port or
+    backend name is treated as a start request.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Command</th><th scope="col">Does</th></tr></thead>
+        <tbody>
+          <tr><td><code>:LiveServer</code></td><td>Open the manager</td></tr>
+          <tr><td><code>:LiveServer toggle</code></td><td>Start this project’s server, or stop it</td></tr>
+          <tr><td><code>:LiveServer start 3000</code></td><td>Start on a specific port</td></tr>
+          <tr><td><code>:LiveServer start browser_sync dir=docs</code></td><td>Pick a backend and a directory</td></tr>
+          <tr><td><code>:LiveServer restart</code></td><td>Restart on the same port</td></tr>
+          <tr><td><code>:LiveServer open</code></td><td>Open the current file’s page</td></tr>
+          <tr><td><code>:LiveServer logs</code></td><td>Tail the server’s output</td></tr>
+          <tr><td><code>:LiveServer pin 4000</code></td><td>This project always uses port 4000</td></tr>
+          <tr><td><code>:LiveServer expose</code></td><td>Let other devices reach it (asks first)</td></tr>
+          <tr><td><code>:LiveServer reap</code></td><td>Stop servers left by a crashed session</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>In the manager</h3>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th scope="col">Key</th><th scope="col">Action</th>
+            <th scope="col">Key</th><th scope="col">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr><td><kbd>Enter</kbd> <kbd>o</kbd></td><td>Open in browser</td><td><kbd>d</kbd></td><td>Stop and remove</td></tr>
+          <tr><td><kbd>s</kbd></td><td>Start / stop</td><td><kbd>e</kbd></td><td>Toggle network exposure</td></tr>
+          <tr><td><kbd>r</kbd></td><td>Restart, same port</td><td><kbd>f</kbd></td><td>SSH forwarding command</td></tr>
+          <tr><td><kbd>p</kbd></td><td>Change port</td><td><kbd>X</kbd></td><td>Stop everything</td></tr>
+          <tr><td><kbd>P</kbd></td><td>Pin / unpin port</td><td><kbd>Tab</kbd></td><td>Next server</td></tr>
+          <tr><td><kbd>l</kbd></td><td>Show output</td><td><kbd>?</kbd></td><td>Help</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <p style="margin-top:1rem">Every one of these is also a <code>:LiveServer</code>
+    subcommand — nothing is keyboard-only.</p>
+  </div>
+</section>
+
+<section id="ports">
+  <div class="wrap">
+    <h2>Ports that stay put</h2>
+    <p>By default the port a project ends up with is remembered and reused. Availability
+    is checked against the operating system, so a port held by a stray Docker publish or
+    another editor is correctly seen as taken.</p>
+
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th scope="col">Strategy</th><th scope="col">Behaviour</th></tr></thead>
+        <tbody>
+          <tr><td><code>"pin"</code></td><td>Reuse the project’s remembered port. <strong>Default.</strong></td></tr>
+          <tr><td><code>"scan"</code></td><td>First free port in <code>port.range</code>.</td></tr>
+          <tr><td><code>"stable"</code></td><td>Derived from the project path — same checkout, same port on every machine, no shared state.</td></tr>
+          <tr><td><code>"fixed"</code></td><td>Always the configured port; fail rather than move.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Per-project configuration</h3>
+    <p>Drop a <code>.liveserverrc.json</code> in the project root and everyone on the
+    team gets the same setup.</p>
+    <pre class="code"><code>{
+  "server": "live_server",
+  "port": 4321,
+  "root": "public",
+  "open": "index.html",
+  "entry_file": "index.html"
+}</code></pre>
+  </div>
+</section>
+
+<section id="ssh">
+  <div class="wrap">
+    <h2>Over SSH</h2>
+    <p>When <code>SSH_CONNECTION</code> or <code>SSH_TTY</code> is set, the plugin stops
+    pretending a browser will open and prints what you can actually act on.</p>
+    <div class="term">
+      <pre>Serving portfolio at http://127.0.0.1:5500/ (on build-box)
+
+Forward it from your machine:
+  <span class="key">ssh -N -L 5500:127.0.0.1:5500 you@build-box</span>
+
+<span class="dim">URL copied to your clipboard via OSC 52.</span></pre>
+    </div>
+    <p style="margin-top:1rem">OSC 52 means the URL lands on your <em>local</em>
+    clipboard even when the remote machine has no clipboard tool at all.</p>
+  </div>
+</section>
+
+<section id="security">
+  <div class="wrap">
+    <h2>Security</h2>
+    <p>A dev server serves your working tree, including files you have not committed.
+    Two decisions follow from that.</p>
+    <div class="grid">
+      <div class="card">
+        <h3>Loopback by default</h3>
+        <p>Servers bind <code>127.0.0.1</code>. Exposing one to the network is possible
+        and sometimes necessary — testing on a phone — but it is always a deliberate,
+        confirmed act.</p>
+      </div>
+      <div class="card">
+        <h3>No accidental code execution</h3>
+        <p>A project file may say <em>where</em> to serve freely. Fields that decide
+        <em>what runs</em> need consent, recorded against the exact file contents. Any
+        edit revokes it and asks again, showing the command it wants to run.</p>
+      </div>
+      <div class="card">
+        <h3>No shell, ever</h3>
+        <p>Processes are spawned with argv lists, so a directory name can never become a
+        command. Project files cannot serve anything outside their own project, and
+        privileged ports are rejected.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section id="config">
+  <div class="wrap">
+    <h2>Configuration</h2>
+    <p>Unknown keys, wrong types and out-of-range values are reported in one message and
+    then ignored — a typo never breaks your <code>init.lua</code>.</p>
+    <pre class="code"><code>require("live_server").setup({
+  server = "auto",            -- or "live_server" | "browser_sync" | "serve" | "python"
+  host = "127.0.0.1",
+  expose = "ask",             -- true | false | "ask"
+
+  port = {
+    strategy = "pin",         -- "pin" | "scan" | "stable" | "fixed"
+    range = { 5500, 5599 },
+  },
+
+  browser = {
+    auto_open = true,
+    open_current_file = true, -- open the page for the buffer you are in
+  },
+
+  ui = {
+    icons = "auto",           -- "auto" | "nerd" | "ascii" | "text"
+    spinner = true,           -- false removes all motion
+  },
 })</code></pre>
-                                <button class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
-                            </div>
-                        </div>
-                        <div class="tab-pane hidden">
-                            <h3 class="text-lg font-semibold text-slate-800 mb-2">Recommended Keymaps</h3>
-                            <p class="text-slate-600 mb-4">For the best experience, add these keymaps to your `lazy.nvim` spec to quickly access the most common features.</p>
-                             <div class="code-container bg-slate-800 rounded-lg overflow-hidden">
-                                <pre class="language-lua p-4 text-sm text-white overflow-x-auto"><code class="code-block">keys = {
-  {
-    "<leader>sl",
-    function() require("live_server.core").toggle_live_server() end,
-    desc = "Toggle Live Server"
-  },
-  {
-    "<leader>sb",
-    function() require("live_server.core").toggle_browser_sync() end,
-    desc = "Toggle BrowserSync"
-  },
-  {
-    "<leader>sL",
-    function() require("live_server.ui").list_servers() end,
-    desc = "List Live Servers"
-  },
-}</code></pre>
-                                <button class="copy-btn absolute top-2 right-2 bg-slate-600 text-white text-xs px-2 py-1 rounded hover:bg-slate-500">Copy</button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
 
-        <section id="commands" class="py-16">
-            <div class="container mx-auto px-4 sm:px-6 lg:px-8">
-                <div class="text-center">
-                    <h2 class="text-3xl font-bold tracking-tight text-slate-900">Functional Overview</h2>
-                    <p class="mt-2 max-w-2xl mx-auto text-lg text-slate-600">The plugin's commands are designed for specific tasks. This chart provides a high-level breakdown of the available functionality.</p>
-                </div>
-                <div class="mt-12 flex flex-col lg:flex-row items-center gap-8">
-                    <div class="w-full lg:w-1/2">
-                         <div class="chart-container">
-                            <canvas id="commandsChart"></canvas>
-                        </div>
-                    </div>
-                    <div class="w-full lg:w-1/2">
-                        <div class="space-y-4">
-                            <div>
-                                <h3 class="text-lg font-semibold text-slate-800">Toggle Commands</h3>
-                                <p class="text-slate-600">Start and stop servers. The core functionality of the plugin.</p>
-                                <ul class="list-disc list-inside mt-2 text-slate-600">
-                                    <li><code>:LiveServerToggle [port]</code></li>
-                                    <li><code>:BrowserSyncToggle [port]</code></li>
-                                </ul>
-                            </div>
-                             <div>
-                                <h3 class="text-lg font-semibold text-slate-800">UI Commands</h3>
-                                <p class="text-slate-600">Interact with the plugin through floating windows and prompts.</p>
-                                <ul class="list-disc list-inside mt-2 text-slate-600">
-                                    <li><code>:LiveServerList</code></li>
-                                    <li><code>:LiveServerPrompt</code></li>
-                                    <li><code>:BrowserSyncPrompt</code></li>
-                                </ul>
-                            </div>
-                             <div>
-                                <h3 class="text-lg font-semibold text-slate-800">Utility Commands</h3>
-                                <p class="text-slate-600">Convenience commands for common actions like opening a browser tab.</p>
-                                <ul class="list-disc list-inside mt-2 text-slate-600">
-                                    <li><code>:LiveServerOpen</code></li>
-                                    <li><code>:BrowserSyncOpen</code></li>
-                                </ul>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-    </main>
+    <h3>Accessibility</h3>
+    <p>Status is always spelled out as a word next to the icon — nothing is conveyed by
+    colour or glyph alone. <code>ui.icons = "text"</code> removes glyphs entirely,
+    <code>"ascii"</code> avoids non-ASCII, and <code>ui.spinner = false</code> removes
+    all motion. Highlight groups are <code>default link</code>s to standard groups, so
+    the panel follows your colorscheme’s contrast in light and dark. On a narrow
+    terminal the panel opens as a split rather than a cramped float, and lines never
+    exceed the window width.</p>
 
-    <footer class="bg-white border-t border-slate-200">
-        <div class="container mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center text-slate-500">
-             <p>&copy; 2025 live-server.nvim. Feel free to contribute at <a href="https://github.com/G00380316/live-server.nvim" class="font-medium text-slate-700 hover:text-slate-900" target="_blank" rel="noopener noreferrer">GitHub</a>.</p>
-        </div>
-    </footer>
+    <div class="note">
+      <p>Full reference: <code>:help live-server</code>. Everything from the previous
+      version still works — old commands and modules forward to the new API and warn
+      once. See <code>:help live-server-migration</code>.</p>
+    </div>
+  </div>
+</section>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', function () {
-            const tabs = document.querySelectorAll('.tab-btn');
-            const panes = document.querySelectorAll('.tab-pane');
+</main>
 
-            tabs.forEach((tab, index) => {
-                tab.addEventListener('click', () => {
-                    tabs.forEach(t => t.classList.remove('text-slate-800', 'border-slate-800'));
-                    tabs.forEach(t => t.classList.add('text-slate-500', 'border-transparent', 'hover:text-slate-700', 'hover:border-slate-300'));
-                    
-                    tab.classList.remove('text-slate-500', 'border-transparent', 'hover:text-slate-700', 'hover:border-slate-300');
-                    tab.classList.add('text-slate-800', 'border-slate-800');
-
-                    panes.forEach(pane => pane.classList.add('hidden'));
-                    panes[index].classList.remove('hidden');
-                });
-            });
-            
-            const codeContainers = document.querySelectorAll('.code-container');
-            codeContainers.forEach(container => {
-                container.style.position = 'relative';
-            });
-            
-            const copyButtons = document.querySelectorAll('.copy-btn');
-            copyButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    const codeBlock = button.previousElementSibling.querySelector('.code-block');
-                    const textToCopy = codeBlock.innerText;
-                    
-                    const textArea = document.createElement('textarea');
-                    textArea.value = textToCopy;
-                    document.body.appendChild(textArea);
-                    textArea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(textArea);
-                    
-                    const originalText = button.innerText;
-                    button.innerText = 'Copied!';
-                    setTimeout(() => {
-                        button.innerText = originalText;
-                    }, 2000);
-                });
-            });
-
-            const ctx = document.getElementById('commandsChart').getContext('2d');
-            new Chart(ctx, {
-                type: 'doughnut',
-                data: {
-                    labels: ['Toggle Commands', 'UI Commands', 'Utility Commands'],
-                    datasets: [{
-                        label: 'Command Types',
-                        data: [2, 3, 2],
-                        backgroundColor: [
-                            'rgba(59, 130, 246, 0.7)',
-                            'rgba(16, 185, 129, 0.7)',
-                            'rgba(249, 115, 22, 0.7)',
-                        ],
-                        borderColor: [
-                            'rgba(59, 130, 246, 1)',
-                            'rgba(16, 185, 129, 1)',
-                            'rgba(249, 115, 22, 1)',
-                        ],
-                        borderWidth: 1
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: {
-                        legend: {
-                            position: 'bottom',
-                        },
-                        title: {
-                            display: true,
-                            text: 'Breakdown of Plugin Commands'
-                        },
-                        tooltip: {
-                            callbacks: {
-                                label: function(context) {
-                                    let label = context.label || '';
-                                    if (label) {
-                                        label += ': ';
-                                    }
-                                    if (context.parsed !== null) {
-                                        label += context.parsed;
-                                    }
-                                    return label;
-                                }
-                            }
-                        }
-                    }
-                }
-            });
-        });
-    </script>
-
+<footer class="site">
+  <div class="wrap">
+    <p>live-server.nvim —
+      <a href="https://github.com/G00380316/live-server.nvim">GitHub</a> ·
+      <a href="https://github.com/G00380316/live-server.nvim/issues">Issues</a> ·
+      <code>:help live-server</code>
+    </p>
+  </div>
+</footer>
 </body>
 </html>

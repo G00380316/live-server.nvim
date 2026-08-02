@@ -1,0 +1,672 @@
+*live-server.txt*         Development server manager for Neovim
+
+                    live-server.nvim ~
+
+              Start it, forget it, keep the same URL. ~
+
+Manage local development servers without leaving Neovim: start and stop them,
+watch their output, pin a port to a project so its URL never changes, and get
+sensible behaviour when Neovim is running over SSH.
+
+==============================================================================
+CONTENTS                                               *live-server-contents*
+
+  1. Requirements ......................... |live-server-requirements|
+  2. Quick start .......................... |live-server-quickstart|
+  3. Commands ............................. |live-server-commands|
+  4. The manager UI ....................... |live-server-dashboard|
+  5. Ports and pinning .................... |live-server-ports|
+  6. Project configuration ................ |live-server-project-config|
+  7. Server backends ...................... |live-server-adapters|
+  8. Working over SSH ..................... |live-server-remote|
+  9. Security model ....................... |live-server-security|
+ 10. Configuration ........................ |live-server-config|
+ 11. Lua API .............................. |live-server-api|
+ 12. Events ............................... |live-server-events|
+ 13. Statusline ........................... |live-server-statusline|
+ 14. Highlights ........................... |live-server-highlights|
+ 15. Troubleshooting ...................... |live-server-troubleshooting|
+ 16. Migrating from 0.x ................... |live-server-migration|
+
+==============================================================================
+1. REQUIREMENTS                                    *live-server-requirements*
+
+Neovim 0.9 or newer, plus at least one server backend. The plugin finds
+whichever you have; you do not have to choose in advance.
+
+    npm install -g live-server      recommended, injects CSS without a reload
+    npm install -g browser-sync     syncs scroll and clicks across devices
+    npm install -g serve            production-like static hosting
+    python3                         zero-install fallback, no live reload
+
+`:checkhealth live_server` reports what it found. Nothing else is required —
+no `pgrep`, no `pkill`, no shell.
+
+==============================================================================
+2. QUICK START                                       *live-server-quickstart*
+
+With lazy.nvim: >lua
+
+    {
+      "G00380316/live-server.nvim",
+      cmd = "LiveServer",
+      keys = {
+        { "<leader>ls", "<Cmd>LiveServer toggle<CR>", desc = "Toggle live server" },
+        { "<leader>lm", "<Cmd>LiveServer<CR>",        desc = "Live server manager" },
+      },
+      opts = {},
+    }
+<
+`opts = {}` is enough; every option has a working default. Then:
+
+    :LiveServer toggle          start (or stop) a server for this project
+    :LiveServer                 open the manager
+
+The plugin works with no call to |live_server.setup()| at all — the commands
+load and configure it on first use.
+
+==============================================================================
+3. COMMANDS                                            *live-server-commands*
+
+                                                                *:LiveServer*
+:LiveServer [subcommand] [args]
+        With no subcommand, opens the manager (|live-server-dashboard|).
+        Every subcommand supports <Tab> completion.
+
+        A bare port or backend name is treated as a start request, so
+        `:LiveServer 3000` and `:LiveServer browser_sync` do what they look
+        like.
+
+Subcommands ~
+
+:LiveServer start [backend] [port] [dir] [port=N] [dir=PATH] [expose] [no-open]
+        Start a server for the current project. Arguments may be given in any
+        order; a number is a port, a known backend name is a backend, and
+        anything else is a directory. >
+            :LiveServer start
+            :LiveServer start 3000
+            :LiveServer start browser_sync port=4000 dir=docs
+            :LiveServer start expose
+<
+:LiveServer stop [all]
+        Stop the current project's server, or every server with `all`.
+
+:LiveServer toggle [backend]
+        Start the project's server, or stop it if it is already running.
+
+:LiveServer restart
+        Restart on the same port. The URL does not change.
+
+:LiveServer open [path]
+        Open the served page in a browser. Over SSH, reports the forwarding
+        command instead (|live-server-remote|).
+
+:LiveServer dashboard
+        Open the manager.
+
+:LiveServer logs
+        Show a server's process output (|live-server-dashboard|).
+
+:LiveServer status
+        Print a one-line summary of every running server.
+
+:LiveServer port [N]
+        Move a running server to another port, asking if `N` is omitted.
+
+:LiveServer pin [N]
+:LiveServer unpin [backend]
+:LiveServer pins [prune]
+        Manage port pins. See |live-server-ports|.
+
+:LiveServer expose
+        Restart the server bound to every interface so other devices on the
+        network can reach it — or bound back to loopback if it already is.
+        Always asks first.
+
+:LiveServer reap
+        Stop server processes left running by a previous Neovim session that
+        exited abnormally. Lists them and asks before killing anything.
+
+:LiveServer trust [revoke [path]]
+        Show or revoke consent given to project files
+        (|live-server-security|).
+
+:LiveServer log
+        Open the plugin's own debug log.
+
+:LiveServer health
+        Same as `:checkhealth live_server`.
+
+Deprecated commands ~
+                                                        *:LiveServerToggle*
+                                                        *:BrowserSyncToggle*
+                                                        *:LiveServerList*
+                                                        *:LiveServerPrompt*
+                                                        *:BrowserSyncPrompt*
+                                                        *:LiveServerOpen*
+                                                        *:BrowserSyncOpen*
+The pre-1.0 names still work and map onto `:LiveServer` subcommands. Set
+`legacy_commands = false` to leave the namespace clean.
+
+==============================================================================
+4. THE MANAGER UI                                     *live-server-dashboard*
+
+`:LiveServer` opens a panel listing every server grouped by project, with its
+backend, status, port, uptime and URL.
+
+Keys (all configurable through `ui.keys`) ~
+
+    <CR> o      open the page in a browser
+    s           start or stop the server under the cursor
+    r           restart it on the same port
+    p           move it to another port
+    P           pin or unpin this port for the project
+    l           show its process output
+    y           copy the URL to the clipboard
+    a           start a new server here
+    d           stop it and remove the entry
+    e           toggle exposing it on the local network
+    f           show the ssh port-forwarding command
+    X           stop every server
+    R           re-scan for installed backends
+    <Tab>       jump to the next server
+    <S-Tab>     jump to the previous server
+    ?           show this list in the editor
+    q <Esc>     close
+
+Nothing is keyboard-only or mouse-only: every action above is also a
+`:LiveServer` subcommand.
+
+The log view (`l`) tails output live and stops following the moment you scroll
+up, so reading a stack trace is never interrupted. Inside it: `f` toggles
+following, `t` toggles timestamps, `r` restarts, `c` clears, `y` copies
+everything, `G` jumps to the end and resumes following.
+
+Accessibility ~
+
+* Status is always spelled out as a word next to the icon, never conveyed by
+  colour or glyph alone.
+* `ui.icons = "text"` removes glyphs entirely.
+* `ui.icons = "ascii"` avoids anything outside ASCII.
+* `ui.spinner = false` removes all motion.
+* Every highlight group is a `default link` to a standard group, so the panel
+  follows your colorscheme's contrast in both light and dark backgrounds.
+* Below `ui.min_float_width` columns the panel opens as a split rather than a
+  cramped float with truncated rows.
+* Lines never exceed the window width, so nothing is lost off-screen.
+
+==============================================================================
+5. PORTS AND PINNING                                      *live-server-ports*
+
+A project keeping the same URL is worth more than it sounds: bookmarks stay
+valid, an open devtools session keeps its breakpoints, a CORS allowlist keeps
+matching, and a QR code taped to a test phone keeps working.
+
+By default the port a project ends up with is remembered and reused. To choose
+one explicitly: >
+
+    :LiveServer pin 4000
+<
+and to forget it: >
+
+    :LiveServer unpin
+<
+`:LiveServer pins` lists every pin; `:LiveServer pins prune` drops the ones
+whose directory no longer exists. Pins live in
+`stdpath("data")/live-server.nvim/ports.json`.
+
+Strategies ~
+
+`port.strategy` decides where a port comes from when the command does not say:
+
+    "pin"     reuse the project's remembered port (default)
+    "scan"    first free port in `port.range`
+    "stable"  derived from the project path — the same checkout gets the same
+              port on every machine, with no shared state to synchronise
+    "fixed"   always `port.defaults[backend]`, and fail rather than move
+
+Resolution order, first match wins: an explicit port on the command line, a
+port from the project file, the pin, then the strategy. Every candidate is
+checked against the operating system before use, so a port held by a stray
+`docker` publish or another editor is correctly seen as taken. If the
+preferred port is busy the plugin moves to the next free one and tells you
+which process held the old one — except under `"fixed"`, where silently moving
+would break whatever you hard-coded the port into.
+
+`port.range` is the search range used by `"scan"` and `"stable"`, and the
+fallback whenever a preferred port is taken. It is deliberately independent of
+`port.defaults`, which is the *preferred* starting port per backend.
+
+==============================================================================
+6. PROJECT CONFIGURATION                          *live-server-project-config*
+
+Drop a `.liveserverrc.json` in the project root to set the defaults for
+everyone working on it: >json
+
+    {
+      "server": "live_server",
+      "port": 4321,
+      "root": "public",
+      "open": "index.html",
+      "entry_file": "index.html"
+    }
+<
+Fields ~
+
+    server       backend name, or "auto"
+    port         preferred port
+    host         interface to bind
+    root         directory to serve, relative to the project root
+    open         page opened in the browser
+    entry_file   single-page-app fallback document
+    expose       bind every interface (still asks for confirmation)
+    auto_open    open a browser on start
+    watch        { extensions = [...], ignore = [...] }
+
+    command      argv to run instead of the backend      ) require consent,
+    args         extra arguments appended to the command ) see
+    env          environment variables                   ) |live-server-security|
+
+`root` may not point outside the project. Saving the file invalidates the
+cache; restart the server to apply it.
+
+==============================================================================
+7. SERVER BACKENDS                                     *live-server-adapters*
+
+    live_server    live-server. CSS injected without a page reload. Default.
+    browser_sync   browser-sync. Syncs scroll, clicks and form input across
+                   every connected device. Its extra web UI port is disabled
+                   so one server means exactly one port.
+    serve          Vercel's `serve`, via npx if not installed globally.
+                   Clean URLs and correct MIME types; no live reload.
+    python         `python3 -m http.server`. Always available; no live reload.
+
+With `server = "auto"` (the default) the first installed backend from
+`adapter_priority` is used.
+
+Adding your own ~
+
+Simple case, a command template: >lua
+
+    require("live_server").setup({
+      adapters = {
+        vite = {
+          display = "vite",
+          bin = "npx",
+          live_reload = true,
+          install = "npm install -D vite",
+          command = { "npx", "vite", "--port", "{port}", "--host", "{host}", "{dir}" },
+        },
+      },
+    })
+<
+Placeholders are `{port}`, `{host}`, `{dir}` and `{root}`.
+
+Full control, a build function: >lua
+
+    require("live_server").register_adapter({
+      name = "caddy",
+      display = "caddy",
+      bin = "caddy",
+      install = "brew install caddy",
+      live_reload = false,
+      build = function(ctx)
+        return { "caddy", "file-server", "--listen",
+                 ("%s:%d"):format(ctx.host, ctx.port), "--root", ctx.serve_dir }
+      end,
+    })
+<
+`build` receives a |live_server.SpawnContext| and returns an argv list.
+Arguments are passed to the process directly — never through a shell — so a
+directory named `; rm -rf ~` is just a directory name.
+
+==============================================================================
+8. WORKING OVER SSH                                      *live-server-remote*
+
+This is where a naive live server plugin quietly fails. The server binds
+loopback *on the remote machine*, `xdg-open` either is missing or opens a
+browser nobody can see, and the URL that gets printed is unreachable from the
+laptop in front of you.
+
+When `SSH_CONNECTION` or `SSH_TTY` is set, the plugin stops pretending:
+
+* it does not try to launch a browser;
+* it reports the exact command to run locally, e.g. >
+      ssh -N -L 5500:127.0.0.1:5500 you@build-box
+<
+* it copies the URL to *your* clipboard using OSC 52, which works even when
+  the remote machine has no clipboard tool at all;
+* `f` in the manager re-shows and re-copies the forwarding command.
+
+`remote.detect = false` turns this off if you have your own arrangement.
+
+If you would rather reach the server directly than forward a port, bind it to
+the network with `:LiveServer expose` — read |live-server-security| first.
+
+==============================================================================
+9. SECURITY MODEL                                      *live-server-security*
+
+A dev server serves your working tree, including files you have not committed.
+Two decisions follow from that.
+
+Loopback by default ~
+
+Servers bind `127.0.0.1`. Exposing one to the network is possible and
+sometimes necessary — testing a layout on a phone — but it is always a
+deliberate, confirmed act (`:LiveServer expose`, or `expose = true` in your
+own configuration as standing consent).
+
+Project files cannot execute code by accident ~
+
+`.liveserverrc.json` may set where and how to serve without any prompt. Fields
+that decide *what process runs* — `command`, `args`, `env` — are code
+execution by another name, so cloning a repository and opening a file in it is
+never enough to run them.
+
+Consent is recorded against the exact file contents, the same model as
+Neovim's own |:trust|. Any edit — by a teammate, a dependency bot, or a
+malicious pull request — revokes it automatically and asks again, showing the
+exact command it wants to run.
+
+`project.trust` controls this: `"prompt"` (default), `"deny"` to ignore those
+fields entirely, or `"allow"` on a machine where every repository is trusted.
+`:LiveServer trust` lists decisions; `:LiveServer trust revoke` clears them.
+
+Additionally ~
+
+* A project file may not serve a directory outside its own project, so a
+  cloned repository cannot point the server at `$HOME`.
+* Processes are spawned with argv lists, never a shell string.
+* Ports below 1024 are rejected.
+* Only `http://` URLs on a local address are ever handed to a browser.
+* State files are written with mode 0600.
+
+==============================================================================
+10. CONFIGURATION                                        *live-server-config*
+
+                                                       *live_server.setup()*
+Call `require("live_server").setup({...})`, or set `vim.g.live_server` to a
+table before the plugin loads. Unknown keys, wrong types and out-of-range
+values are reported in one message and then ignored — a typo never breaks your
+`init.lua`.
+
+Defaults: >lua
+
+    require("live_server").setup({
+      -- Backend
+      server = "auto",
+      adapter_priority = { "live_server", "browser_sync", "serve", "python" },
+      adapters = {},
+
+      -- Binding
+      host = "127.0.0.1",
+      expose = "ask",              -- true | false | "ask"
+
+      root = {
+        patterns = { ".liveserverrc.json", ".git", "package.json", "index.html" },
+        fallback = "cwd",          -- "cwd" | "file"
+        serve_dir = nil,           -- e.g. "public"
+        auto = { "public", "dist", "build", "src", "docs", "www", "site", "app" },
+      },
+
+      port = {
+        strategy = "pin",          -- "pin" | "scan" | "stable" | "fixed"
+        range = { 5500, 5599 },
+        defaults = {
+          live_server = 5500, browser_sync = 3000, serve = 3000, python = 8000,
+        },
+        remember = true,
+        max_attempts = 64,
+      },
+
+      browser = {
+        auto_open = true,
+        cmd = nil,                 -- string or argv list; nil uses vim.ui.open
+        open_current_file = true,
+        reuse_tab = true,
+      },
+
+      watch = {
+        extensions = { "html", "htm", "css", "js", "mjs", "cjs", "json", "svg", "md" },
+        ignore = { "node_modules", ".git", "dist", "build", "coverage",
+                   ".next", ".nuxt", ".cache", "vendor", "target", "__pycache__" },
+        delay = 100,
+      },
+
+      entry_file = nil,            -- SPA fallback document
+      extra_args = {},             -- { live_server = { "--cors" } }
+
+      restart = { on_crash = true, max_attempts = 3, backoff = 1000 },
+      ready   = { timeout = 15000, interval = 150 },
+
+      project = {
+        enabled = true,
+        files = { ".liveserverrc.json", ".live-server.json" },
+        trust = "prompt",          -- "prompt" | "deny" | "allow"
+      },
+
+      remote = { detect = true, forward_hint = true, copy_url = true },
+
+      ui = {
+        border = "rounded",
+        width = 0.7,
+        height = 0.6,
+        icons = "auto",            -- "auto" | "nerd" | "ascii" | "text"
+        spinner = true,
+        compact = false,
+        footer = true,
+        refresh = 250,
+        min_float_width = 64,
+        highlights = {},
+        keys = { ... },            -- see |live-server-dashboard|
+      },
+
+      notify = { enabled = true, level = "info" },
+      log    = { level = "warn", max_lines = 2000 },
+
+      statusline = { prefix = "", show_adapter = false },
+
+      legacy_commands = true,
+      detect_orphans = true,
+
+      on_start = nil,              -- function(server)
+      on_stop  = nil,              -- function(server)
+    })
+<
+Notes ~
+
+* List options are replaced, not merged: setting `watch.ignore` means "these",
+  not "these plus the defaults".
+* `ui.width` and `ui.height` are a fraction of the editor when <= 1, absolute
+  cells otherwise.
+* `ready.timeout` is how long to wait for the port to answer before reporting
+  the server as unhealthy. The process is not killed; its output is in
+  `:LiveServer logs`.
+
+==============================================================================
+11. LUA API                                                 *live-server-api*
+
+>lua
+    local ls = require("live_server")
+
+    ls.setup(opts)                    -- optional
+    ls.start(opts, callback)          -- opts: adapter, port, dir, path, expose, open
+    ls.stop(server?)
+    ls.stop_all()
+    ls.toggle(opts, callback)
+    ls.restart(server?)
+    ls.open(server?, path?)
+
+    ls.pin(port, { adapter?, root? })
+    ls.unpin({ adapter?, root? })
+    ls.pins()
+
+    ls.servers({ active_only? })      -- live_server.Server[]
+    ls.current()                      -- this project's active server, or nil
+    ls.dashboard()
+    ls.logs(server?)
+    ls.statusline({ global? })
+    ls.lualine(opts)
+    ls.on(event, handler)             -- returns an unsubscribe function
+    ls.register_adapter(spec)
+    ls.check()
+<
+A |live_server.Server| exposes `:url(path?)`, `:info()`, `:uptime()`,
+`:is_active()`, `:log_lines(limit?)`, `:start()`, `:stop()`, `:restart()`,
+and the fields `adapter`, `project`, `host`, `port`, `status`, `pid`.
+
+Example — reload a preview when a build finishes: >lua
+
+    require("live_server").on("ready", function(payload)
+      vim.notify("preview at " .. payload.server:url())
+    end)
+<
+==============================================================================
+12. EVENTS                                               *live-server-events*
+
+Every state change fires both a Lua event and a |User| autocommand named
+`LiveServer<Event>`, whose `data` is the server's `:info()` table.
+
+    starting    process spawned, port not answering yet
+    ready       port confirmed accepting connections
+    stopping    termination requested
+    stopped     exited on request or cleanly
+    crashed     exited unexpectedly
+    output      a line of stdout/stderr arrived
+    changed     fired after every one of the above
+
+Example: >lua
+
+    vim.api.nvim_create_autocmd("User", {
+      pattern = "LiveServerReady",
+      callback = function(event)
+        print(event.data.url, event.data.port, event.data.project_name)
+      end,
+    })
+<
+==============================================================================
+13. STATUSLINE                                       *live-server-statusline*
+
+>lua
+    -- lualine
+    sections = {
+      lualine_x = { require("live_server").lualine() },
+    }
+
+    -- anything else
+    require("live_server").statusline()   -- "● 5500", or "" when idle
+<
+The string is rebuilt only when a server actually changes state, so calling it
+on every redraw costs nothing. Pass `{ global = true }` to count every
+project rather than the current one.
+
+==============================================================================
+14. HIGHLIGHTS                                       *live-server-highlights*
+
+Every group is defined with `default link`, so your colorscheme wins and you
+can override any of them through `ui.highlights`.
+
+    LiveServerNormal        NormalFloat
+    LiveServerBorder        FloatBorder
+    LiveServerTitle         FloatTitle
+    LiveServerHeader        Title
+    LiveServerProject       Directory
+    LiveServerAdapter       Identifier
+    LiveServerPort          Number
+    LiveServerUrl           @markup.link.url
+    LiveServerRunning       DiagnosticOk
+    LiveServerStarting      DiagnosticWarn
+    LiveServerStopping      DiagnosticWarn
+    LiveServerStopped       Comment
+    LiveServerCrashed       DiagnosticError
+    LiveServerUnhealthy     DiagnosticWarn
+    LiveServerKey           Special
+    LiveServerHint          Comment
+    LiveServerBadge         DiagnosticInfo
+    LiveServerSeparator     WinSeparator
+    LiveServerCursorLine    CursorLine
+    LiveServerLogOut        Normal
+    LiveServerLogErr        DiagnosticError
+    LiveServerLogMeta       Comment
+
+Example: >lua
+
+    require("live_server").setup({
+      ui = { highlights = { LiveServerRunning = { fg = "#a6e3a1", bold = true } } },
+    })
+<
+==============================================================================
+15. TROUBLESHOOTING                             *live-server-troubleshooting*
+
+Start with `:checkhealth live_server`. It reports the Neovim version, which
+backends are installed and at what version, how many ports in your range are
+free, every pin, whether this is an SSH session, and where the log lives.
+
+"no dev server found" ~
+    Nothing is installed. `npm install -g live-server`, or rely on `python3`,
+    which needs no install but has no live reload. Press `R` in the manager
+    after installing to re-scan.
+
+The server says "no answer" ~
+    The process started but never accepted connections within `ready.timeout`.
+    It is still running — `:LiveServer logs` shows exactly what it printed,
+    which is almost always a permissions or path error.
+
+The port keeps changing ~
+    Something else is taking the preferred port first. `:LiveServer pin 4000`
+    fixes a port for the project, and the message on fallback names the
+    process that held the old one.
+
+Changes are not reloading ~
+    `serve` and `python` have no live reload — the manager marks them
+    "no reload". Install `live-server` for injection-based reloading. If you
+    are using `live_server` and reloads are still missed, the file is probably
+    matched by `watch.ignore`.
+
+A server outlived Neovim ~
+    Only possible if Neovim was killed abnormally. `:LiveServer reap` finds
+    them, verifies each PID still belongs to a server we started, and asks
+    before stopping anything.
+
+Nothing opens in a browser ~
+    Over SSH that is intentional (|live-server-remote|). Otherwise set
+    `browser.cmd`.
+
+Filing a bug ~
+    `log = { level = "debug" }`, reproduce, then attach `:LiveServer log`.
+
+==============================================================================
+16. MIGRATING FROM 0.X                                *live-server-migration*
+
+Everything from the previous version still works. The old commands and the
+`live_server.core` / `live_server.utils` modules forward to the new API and
+warn once.
+
+Option changes ~
+
+    live_server_port        ->  port.defaults.live_server
+    browser_sync_port       ->  port.defaults.browser_sync
+    files_to_watch          ->  watch.extensions (a list, no quoting)
+    auto_open_browser       ->  browser.auto_open
+
+Behaviour changes worth knowing ~
+
+* Servers are no longer detached. Neovim owns them, which is what makes
+  cleanup on exit reliable — including after a crash.
+* Port availability is checked against the operating system, not just against
+  the plugin's own list, so a port held by any other process is detected.
+* A browser opens only once the port is confirmed reachable, instead of after
+  a fixed one-second guess.
+* Servers bind loopback rather than every interface. See
+  |live-server-security|.
+* `browser-sync`'s extra web UI port is disabled by default.
+
+Recommended replacement keymaps: >lua
+
+    { "<leader>ls", "<Cmd>LiveServer toggle<CR>",  desc = "Toggle live server" },
+    { "<leader>lm", "<Cmd>LiveServer<CR>",         desc = "Live server manager" },
+    { "<leader>lo", "<Cmd>LiveServer open<CR>",    desc = "Open in browser" },
+    { "<leader>ll", "<Cmd>LiveServer logs<CR>",    desc = "Live server logs" },
+<
+==============================================================================
+vim:tw=78:ts=8:sw=8:et:ft=help:norl:

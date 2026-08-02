@@ -1,0 +1,218 @@
+---@mod live_server.health `:checkhealth live_server`
+---
+--- Written to answer the questions a bug report would otherwise take three
+--- round trips to establish: which backend is installed, at what version, is
+--- the configured port range usable, is this an SSH session, and where is the
+--- log.
+
+local M = {}
+
+local health = vim.health or {}
+local start = health.start or health.report_start
+local ok = health.ok or health.report_ok
+local info = health.info or health.report_info
+local warn = health.warn or health.report_warn
+local error_ = health.error or health.report_error
+
+local function check_neovim()
+  start("Neovim")
+  if vim.fn.has("nvim-0.9") == 1 then
+    ok("Neovim " .. tostring(vim.version()))
+  else
+    error_("live-server.nvim requires Neovim 0.9 or newer")
+  end
+  if vim.fn.has("nvim-0.10") == 1 then
+    ok("`vim.ui.open` available — browser opening uses the platform default")
+  else
+    info("Neovim 0.10+ would enable `vim.ui.open` for browser opening")
+  end
+end
+
+local function check_config()
+  start("Configuration")
+  local config = require("live_server.config")
+  if not config.did_setup then
+    info("`setup()` has not been called; defaults are in use")
+  else
+    ok("`setup()` completed")
+  end
+
+  local issues = config.validate(config.options)
+  if #issues == 0 then
+    ok("configuration is valid")
+  else
+    for _, issue in ipairs(issues) do
+      error_(issue)
+    end
+  end
+
+  local cfg = config.get()
+  info(("serving host: %s%s"):format(cfg.host, cfg.expose == true and " (LAN exposure enabled)" or ""))
+  info(("port strategy: %s, range %d-%d"):format(cfg.port.strategy, cfg.port.range[1], cfg.port.range[2]))
+  if cfg.expose == true then
+    warn("`expose = true` binds every interface — anyone on your network can read the served files")
+  end
+end
+
+---@param callback fun()
+local function check_adapters(callback)
+  start("Server backends")
+  local adapters = require("live_server.adapters")
+  local names = adapters.names()
+  local pending = #names
+  if pending == 0 then
+    error_("no adapters registered")
+    return callback()
+  end
+
+  local any_available = false
+  for _, name in ipairs(names) do
+    local spec = adapters.get(name)
+    if adapters.available(name) then
+      any_available = true
+      adapters.version(name, function(version)
+        ok(("%s %s%s"):format(spec.display, version or "(version unknown)", spec.live_reload and "" or "  [no live reload]"))
+        pending = pending - 1
+        if pending == 0 then
+          if not any_available then
+            error_("no dev server is installed")
+          end
+          callback()
+        end
+      end)
+    else
+      info(("%s is not installed — %s"):format(spec.display, spec.install))
+      pending = pending - 1
+      if pending == 0 then
+        callback()
+      end
+    end
+  end
+end
+
+local function check_ports()
+  start("Ports")
+  local cfg = require("live_server.config").get()
+  local net = require("live_server.net")
+  local range = cfg.port.range
+
+  local free, checked = 0, 0
+  for port = range[1], math.min(range[2], range[1] + 19) do
+    checked = checked + 1
+    if net.is_free(cfg.host, port) then
+      free = free + 1
+    end
+  end
+  if free == 0 then
+    error_(("no free port in the first %d of %d-%d"):format(checked, range[1], range[2]))
+  elseif free < checked / 2 then
+    warn(("only %d of the first %d ports in %d-%d are free"):format(free, checked, range[1], range[2]))
+  else
+    ok(("%d of the first %d ports in %d-%d are free"):format(free, checked, range[1], range[2]))
+  end
+
+  local pins = require("live_server.port").pins()
+  if #pins == 0 then
+    info("no port pins recorded")
+  else
+    ok(("%d port pin%s recorded"):format(#pins, #pins == 1 and "" or "s"))
+    for _, pin in ipairs(pins) do
+      local exists = require("live_server.util").is_dir(pin.root)
+      local line = ("  %s → %s :%d"):format(vim.fn.fnamemodify(pin.root, ":~"), pin.adapter, pin.port)
+      if exists then
+        info(line)
+      else
+        warn(line .. "  (directory is gone — `:LiveServer pins prune` clears it)")
+      end
+    end
+  end
+end
+
+local function check_environment()
+  start("Environment")
+  local remote = require("live_server.remote")
+  local util = require("live_server.util")
+
+  if remote.is_remote() then
+    local remote_info = remote.info()
+    ok(("SSH session detected (%s@%s)"):format(remote_info.user, remote_info.host))
+    info("URLs will be reported for port forwarding instead of opening a browser here")
+  else
+    ok("local session")
+  end
+
+  if util.is_wsl then
+    info("WSL detected — browser opening goes through the Windows host")
+  end
+
+  local lan = require("live_server.net").lan_ip()
+  info("LAN address: " .. (lan or "none detected"))
+
+  local browser_cfg = require("live_server.config").get().browser
+  if browser_cfg.cmd then
+    info("browser command: " .. (type(browser_cfg.cmd) == "table" and table.concat(browser_cfg.cmd, " ") or browser_cfg.cmd))
+  elseif vim.ui.open then
+    ok("browser opening: vim.ui.open")
+  else
+    local candidates = { "xdg-open", "open", "wslview", "explorer.exe" }
+    local found = vim.tbl_filter(util.executable, candidates)
+    if #found > 0 then
+      ok("browser opening: " .. found[1])
+    else
+      warn("no URL opener found; set `browser.cmd` or open URLs manually")
+    end
+  end
+end
+
+local function check_state()
+  start("State")
+  local util = require("live_server.util")
+  local log = require("live_server.log")
+
+  local manager = require("live_server.manager")
+  local active = manager.count_active()
+  info(("%d server%s running in this session"):format(active, active == 1 and "" or "s"))
+  for _, server in ipairs(manager.servers({ active_only = true })) do
+    info(("  %s  %s  %s"):format(server.project.name, server.adapter.display, server:url()))
+  end
+
+  local log_path = log.path()
+  if util.is_file(log_path) then
+    local stat = util.uv.fs_stat(log_path)
+    ok(("log: %s (%.1f KB)"):format(log_path, (stat and stat.size or 0) / 1024))
+  else
+    info("log: " .. log_path .. " (not created yet)")
+  end
+
+  local trusted = require("live_server.trust").list()
+  if #trusted > 0 then
+    info(("%d project file%s trusted"):format(#trusted, #trusted == 1 and "" or "s"))
+    for _, record in ipairs(trusted) do
+      info(("  [%s] %s"):format(record.decision, vim.fn.fnamemodify(record.path, ":~")))
+    end
+  end
+end
+
+--- Entry point for `:checkhealth live_server`.
+function M.check()
+  check_neovim()
+  check_config()
+  check_adapters(function()
+    check_ports()
+    check_environment()
+    check_state()
+
+    require("live_server.manager").find_orphans(function(orphans)
+      if #orphans > 0 then
+        start("Orphaned processes")
+        warn(("%d server process%s from a previous session are still running"):format(#orphans, #orphans == 1 and "" or "es"))
+        for _, record in ipairs(orphans) do
+          warn(("  pid %d on port %s (%s)"):format(record.pid, tostring(record.port), record.adapter or "?"))
+        end
+        info("`:LiveServer reap` stops them")
+      end
+    end)
+  end)
+end
+
+return M

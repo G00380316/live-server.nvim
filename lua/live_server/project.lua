@@ -11,8 +11,12 @@ local util = require("live_server.util")
 local M = {}
 
 ---@class live_server.Project
----@field root string absolute project root
+---@field root string absolute project root (the repository)
 ---@field name string display name (basename of root)
+---@field workdir string directory the server runs in. Equal to `root` unless
+---       the app lives further down — `repo/frontend` — in which case
+---       `live_server.discover` points it there. This, not `root`, is a
+---       server's identity: two apps in one repository are two servers.
 ---@field serve_dir string absolute directory actually served
 ---@field config table sanitized settings from the project file
 ---@field privileged table execution-affecting settings awaiting consent
@@ -78,11 +82,11 @@ local function find_root(dir, patterns)
   return nil
 end
 
---- Pick the directory that actually holds the site.
+--- Pick the directory that actually holds the site, relative to `root`.
 ---@param root string
 ---@param override string?
 ---@return string
-local function resolve_serve_dir(root, override)
+function M.serve_dir_for(root, override)
   if override and override ~= "" then
     local candidate = util.is_absolute(override) and util.normalize(override) or util.normalize(root .. "/" .. override)
     if util.is_dir(candidate) then
@@ -186,10 +190,11 @@ end
 ---@return live_server.Project
 local function build(root)
   local safe, privileged, path, content = read_project_file(root)
-  local serve_dir = resolve_serve_dir(root, safe.root or config().root.serve_dir)
+  local serve_dir = M.serve_dir_for(root, safe.root or config().root.serve_dir)
   return {
     root = root,
     name = vim.fn.fnamemodify(root, ":t"),
+    workdir = root,
     serve_dir = serve_dir,
     config = safe,
     privileged = privileged,
@@ -249,6 +254,34 @@ function M.invalidate(path)
   else
     cache = {}
   end
+end
+
+--- A copy of `project` aimed at `dir`, for when the app lives below the
+--- repository root. The root is deliberately left alone: it is what the user's
+--- editor pinned and what the dashboard groups by. Only the working directory,
+--- what gets served, and the display name move.
+---@param project live_server.Project
+---@param dir string absolute directory inside the project
+---@return live_server.Project
+function M.derive(project, dir)
+  local target = util.normalize(dir)
+  if target == "" or target == project.workdir then
+    return project
+  end
+  if not util.is_within(project.root, target) then
+    log.warn("refusing to target a directory outside the project", { root = project.root, dir = target })
+    return project
+  end
+
+  local derived = vim.tbl_extend("force", {}, project)
+  derived.workdir = target
+  derived.serve_dir = M.serve_dir_for(target, project.config.root or config().root.serve_dir)
+
+  local relative = util.relative(project.root, target)
+  if relative and relative ~= "" then
+    derived.name = ("%s/%s"):format(project.name, relative)
+  end
+  return derived
 end
 
 --- URL path for the current buffer relative to a served directory, e.g.

@@ -170,7 +170,7 @@ end
 ---@param opts? { adapter?: string, root?: string }
 function M.pin(port, opts)
   opts = opts or {}
-  local root = opts.root or require("live_server.project").get().root
+  local root = opts.root or M.workdir()
   local adapter = opts.adapter
   if not adapter then
     local resolved = require("live_server.adapters").resolve()
@@ -186,7 +186,7 @@ end
 ---@return boolean removed
 function M.unpin(opts)
   opts = opts or {}
-  local root = opts.root or require("live_server.project").get().root
+  local root = opts.root or M.workdir()
   local port_mod = require("live_server.port")
   if opts.adapter then
     return port_mod.unpin(root, opts.adapter)
@@ -196,6 +196,25 @@ function M.unpin(opts)
     removed = port_mod.unpin(root, name) or removed
   end
   return removed
+end
+
+--- The directory a server would run in here: the current project's app, which
+--- may live below the repository root.
+---@return string
+function M.workdir()
+  local project = require("live_server.project").get()
+  local current = M.current()
+  if current then
+    return current.project.workdir
+  end
+  local candidates = require("live_server.discover").candidates(project.root)
+  return candidates[1] and candidates[1].dir or project.root
+end
+
+--- Apps discovered inside the current repository.
+---@return live_server.Candidate[]
+function M.apps()
+  return require("live_server.discover").candidates(require("live_server.project").get().root)
 end
 
 --- Every recorded pin.

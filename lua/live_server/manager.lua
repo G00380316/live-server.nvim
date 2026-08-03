@@ -5,6 +5,7 @@
 --- exactly one source of truth about what is running.
 
 local adapters = require("live_server.adapters")
+local discover = require("live_server.discover")
 local event = require("live_server.event")
 local log = require("live_server.log")
 local net = require("live_server.net")
@@ -67,17 +68,39 @@ end
 function M.for_project(root, opts)
   local normalized = util.normalize(root)
   return vim.tbl_filter(function(server)
-    return server.project.root == normalized
+    return server.project.root == normalized or util.is_within(normalized, server.project.workdir)
   end, M.servers(opts))
 end
 
---- The active server for a project + adapter, if any.
----@param root string
+--- The active server for a directory + adapter, if any.
+---
+--- Keyed on the working directory rather than the repository root, because a
+--- monorepo legitimately runs `frontend` and `api` at the same time. Passing a
+--- repository root still matches anything inside it.
+---@param dir string project root or working directory
 ---@param adapter_name? string nil matches any adapter
 ---@return live_server.Server?
-function M.find_active(root, adapter_name)
-  for _, server in ipairs(M.for_project(root, { active_only = true })) do
-    if not adapter_name or server.adapter.name == adapter_name then
+function M.find_active(dir, adapter_name)
+  local target = util.normalize(dir)
+  for _, server in ipairs(M.servers({ active_only = true })) do
+    local matches = server.project.workdir == target
+      or server.project.root == target
+      or util.is_within(target, server.project.workdir)
+    if matches and (not adapter_name or server.adapter.name == adapter_name) then
+      return server
+    end
+  end
+  return nil
+end
+
+--- The active server for exactly this working directory.
+---@param workdir string
+---@param adapter_name? string
+---@return live_server.Server?
+function M.find_in_workdir(workdir, adapter_name)
+  local target = util.normalize(workdir)
+  for _, server in ipairs(M.servers({ active_only = true })) do
+    if server.project.workdir == target and (not adapter_name or server.adapter.name == adapter_name) then
       return server
     end
   end
@@ -279,8 +302,28 @@ function M.start(opts, callback)
   callback = callback or function() end
   local cfg = config()
 
-  local project = project_mod.get(opts.dir)
+  local base = project_mod.get(opts.dir)
 
+  -- The app is often not at the repository root. Work out where it actually
+  -- lives before deciding what can run there.
+  discover.resolve(base, opts, function(dir, candidate)
+    if not dir then
+      return callback(nil, "cancelled")
+    end
+    local project = project_mod.derive(base, dir)
+    if candidate and candidate.source ~= "root" and not opts.dir then
+      log.info("targeting a sub-project", { root = base.root, dir = dir, kind = candidate.kind })
+    end
+    M._start_in(opts, project, cfg, callback)
+  end)
+end
+
+--- `start`, once the working directory is known.
+---@param opts live_server.StartOpts
+---@param project live_server.Project
+---@param cfg live_server.Config
+---@param callback fun(server: live_server.Server?, err: string?)
+function M._start_in(opts, project, cfg, callback)
   local adapter_name = opts.adapter or project.config.server or cfg.server
   local adapter, adapter_err = adapters.resolve(adapter_name, project)
   if not adapter then
@@ -288,7 +331,7 @@ function M.start(opts, callback)
     return callback(nil, adapter_err)
   end
 
-  local existing = M.find_active(project.root, adapter.name)
+  local existing = M.find_in_workdir(project.workdir, adapter.name)
   if existing then
     log.notify(("%s is already running for %s at %s"):format(adapter.display, project.name, existing:url()), "warn")
     return callback(existing, nil)
@@ -340,15 +383,9 @@ function M._start_consented(opts, project, adapter, cfg, callback)
       local host = exposed and "0.0.0.0" or (project.config.host or cfg.host)
 
       local serve_dir = project.serve_dir
-      if opts.dir and util.is_dir(util.normalize(opts.dir)) then
-        local candidate = util.normalize(opts.dir)
-        if util.is_within(project.root, candidate) then
-          serve_dir = candidate
-        end
-      end
 
       local resolved, port_err = port_mod.resolve({
-        root = project.root,
+        root = project.workdir,
         adapter = adapter.name,
         host = host,
         requested = opts.port,
@@ -399,7 +436,7 @@ function M._start_consented(opts, project, adapter, cfg, callback)
         end
 
         if cfg.port.remember and cfg.port.strategy == "pin" then
-          port_mod.pin(project.root, adapter.name, server.port)
+          port_mod.pin(project.workdir, adapter.name, server.port)
         end
 
         local suffix = server.adapter.live_reload and "" or "  (no live reload)"
@@ -475,27 +512,20 @@ end
 ---@param callback? fun(server: live_server.Server?, err: string?)
 function M.toggle(opts, callback)
   opts = opts or {}
-  local project = project_mod.get(opts.dir)
-  local adapter_name = opts.adapter
-  if adapter_name and adapter_name ~= "auto" then
-    local existing = M.find_active(project.root, adapter_name)
-    if existing then
-      return M.stop(existing, function()
-        if callback then
-          callback(nil, nil)
-        end
-      end)
-    end
-  else
-    local existing = M.find_active(project.root)
-    if existing then
-      return M.stop(existing, function()
-        if callback then
-          callback(nil, nil)
-        end
-      end)
-    end
+  local base = project_mod.get(opts.dir)
+  local adapter_name = opts.adapter ~= "auto" and opts.adapter or nil
+
+  -- Stop whatever is running for this repository before going to the trouble
+  -- (and the prompt) of working out which sub-project to start.
+  local existing = M.find_active(opts.dir and util.normalize(opts.dir) or base.root, adapter_name)
+  if existing then
+    return M.stop(existing, function()
+      if callback then
+        callback(nil, nil)
+      end
+    end)
   end
+
   M.start(opts, callback)
 end
 
@@ -535,7 +565,7 @@ function M.change_port(server, port, callback)
       if ok then
         local cfg = config()
         if cfg.port.remember and cfg.port.strategy == "pin" then
-          port_mod.pin(server.project.root, server.adapter.name, valid)
+          port_mod.pin(server.project.workdir, server.adapter.name, valid)
         end
         log.notify(("Moved %s from %d to %s"):format(server.adapter.display, previous, server:url()), "info")
       else

@@ -141,6 +141,41 @@ local defaults = {
     delay = 100,
   },
 
+  discover = {
+    --- Look for the app *below* the project root.
+    ---
+    --- Root detection stops at the repository, which is what most editor
+    --- setups (and `:help live-server-ports`) want. But a great many repos put
+    --- the thing you actually run one level down — `repo/frontend`,
+    --- `repo/packages/web` — and without this the plugin would find nothing to
+    --- start. See |live-server-discovery|.
+    ---@type boolean
+    enabled = true,
+
+    --- How many directory levels below the root to walk. Only reached when the
+    --- repository does not declare workspaces, which is the better signal.
+    ---@type integer
+    depth = 3,
+
+    --- Stop after this many servable directories.
+    ---@type integer
+    max_results = 12,
+
+    --- Hard ceiling on directories visited, so a huge monorepo cannot turn one
+    --- keypress into a filesystem crawl.
+    ---@type integer
+    max_dirs = 600,
+
+    --- Ask which app to start when several are found. With `false` the
+    --- shallowest is used.
+    ---@type boolean
+    prompt = true,
+
+    --- Remember the answer per repository, so it is asked once.
+    ---@type boolean
+    remember = true,
+  },
+
   --- Single-page-app fallback: serve this file for unknown routes.
   ---@type string?
   entry_file = nil,
@@ -407,6 +442,20 @@ local rules = {
   ["watch.extensions"] = { types = { "table" } },
   ["watch.ignore"] = { types = { "table" } },
   ["watch.delay"] = { types = { "number" } },
+  ["discover.enabled"] = { types = { "boolean" } },
+  ["discover.depth"] = {
+    types = { "number" },
+    check = function(value)
+      if value < 0 or value > 10 then
+        return false, "expected a depth between 0 and 10"
+      end
+      return true
+    end,
+  },
+  ["discover.max_results"] = { types = { "number" } },
+  ["discover.max_dirs"] = { types = { "number" } },
+  ["discover.prompt"] = { types = { "boolean" } },
+  ["discover.remember"] = { types = { "boolean" } },
   ["entry_file"] = { types = { "string", "nil" } },
   ["extra_args"] = { types = { "table" } },
   ["restart.on_crash"] = { types = { "boolean" } },

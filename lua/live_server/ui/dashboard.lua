@@ -93,7 +93,7 @@ end
 ---@return string[]
 local function badges(server)
   local out = {}
-  if port_mod.get_pin(server.project.root, server.adapter.name) == server.port then
+  if port_mod.get_pin(server.project.workdir, server.adapter.name) == server.port then
     out[#out + 1] = icons.prefix("pinned") .. "pinned"
   end
   if server.exposed then
@@ -169,12 +169,19 @@ local function build_rows(servers, width)
 
   -- Column widths, computed from the data so nothing is truncated needlessly,
   -- then capped so one long backend name cannot push the rest off screen.
-  local adapter_width, port_width = 0, 0
+  local adapter_width, port_width, sub_width = 0, 0, 0
   for _, server in ipairs(servers) do
     adapter_width = math.max(adapter_width, util.width(server:display_name()))
     port_width = math.max(port_width, util.width(tostring(server.port)))
+    local relative = util.relative(server.project.root, server.project.workdir)
+    if relative and relative ~= "" then
+      sub_width = math.max(sub_width, util.width(relative))
+    end
   end
   adapter_width = math.floor(util.clamp(adapter_width, 6, math.max(10, width * 0.25)))
+  -- Only as wide as it needs to be, and zero when every server sits at its
+  -- repository root — the common case must not pay for the monorepo one.
+  sub_width = math.floor(math.min(sub_width, math.max(8, width * 0.2)))
 
   ---@type table<string, live_server.Server[]>
   local grouped, order = {}, {}
@@ -195,7 +202,9 @@ local function build_rows(servers, width)
     local group = grouped[root]
     local marks = {}
     local line = append(" ", marks, icons.prefix("project"), "LiveServerProject")
-    line = append(line, marks, group[1].project.name, "LiveServerProject")
+    -- The repository's own name: a derived project's `name` already carries
+    -- the sub-path, which the per-server column shows.
+    line = append(line, marks, vim.fn.fnamemodify(root, ":t"), "LiveServerProject")
     local remaining = width - util.width(line) - 3
     if remaining > 12 then
       line = append(line, marks, "  " .. util.shorten_path(root, remaining), "LiveServerHint")
@@ -216,6 +225,10 @@ local function build_rows(servers, width)
         util.pad(util.truncate(server:display_name(), adapter_width), adapter_width + 2),
         "LiveServerAdapter"
       )
+      if sub_width > 0 then
+        local sub = util.relative(server.project.root, server.project.workdir) or ""
+        text = append(text, server_marks, util.pad(util.truncate(sub, sub_width), sub_width + 2), "LiveServerProject")
+      end
       text = append(text, server_marks, util.pad(STATUS_LABEL[server.status] or server.status, 11), glyph_group)
       text = append(text, server_marks, util.pad(":" .. server.port, port_width + 3), "LiveServerPort")
 
@@ -521,12 +534,12 @@ local function action_pin()
   if not server then
     return
   end
-  local pinned = port_mod.get_pin(server.project.root, server.adapter.name)
+  local pinned = port_mod.get_pin(server.project.workdir, server.adapter.name)
   if pinned == server.port then
-    port_mod.unpin(server.project.root, server.adapter.name)
+    port_mod.unpin(server.project.workdir, server.adapter.name)
     log.notify(("Unpinned %s for %s."):format(server.adapter.display, server.project.name), "info")
   else
-    port_mod.pin(server.project.root, server.adapter.name, server.port)
+    port_mod.pin(server.project.workdir, server.adapter.name, server.port)
     log.notify(
       ("Pinned %s to port %d for %s — it will reuse this port from now on."):format(
         server.adapter.display,
@@ -570,13 +583,13 @@ local function action_expose()
   if server.exposed then
     manager.stop(server, function()
       manager.forget(server)
-      manager.start({ adapter = server.adapter.name, dir = server.project.root, port = server.port, expose = false })
+      manager.start({ adapter = server.adapter.name, dir = server.project.workdir, port = server.port, expose = false })
     end)
     return
   end
   manager.stop(server, function()
     manager.forget(server)
-    manager.start({ adapter = server.adapter.name, dir = server.project.root, port = server.port, expose = true })
+    manager.start({ adapter = server.adapter.name, dir = server.project.workdir, port = server.port, expose = true })
   end)
 end
 

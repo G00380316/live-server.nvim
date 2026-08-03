@@ -206,6 +206,7 @@ function Server:info()
     id = self.id,
     adapter = self.adapter.name,
     project = self.project.root,
+    workdir = self.project.workdir,
     project_name = self.project.name,
     serve_dir = self.serve_dir,
     host = self.host,
@@ -373,7 +374,7 @@ function Server:start(callback)
   log.info("spawning server", { argv = argv, cwd = self.project.root, port = self.port })
 
   local spawned, job = pcall(vim.fn.jobstart, argv, {
-    cwd = util.is_dir(self.project.root) and self.project.root or nil,
+    cwd = util.is_dir(self.project.workdir) and self.project.workdir or nil,
     env = env,
     -- Deliberately *not* detached: Neovim owning the child is what guarantees
     -- no orphaned server survives a crash of the editor.

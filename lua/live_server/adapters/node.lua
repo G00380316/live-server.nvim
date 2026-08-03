@@ -50,7 +50,7 @@ return {
   ---@return boolean
   ---@return string? reason
   detect_project = function(project, opts)
-    local framework, reason = framework_mod.detect(project.root)
+    local framework, reason = framework_mod.detect(project.workdir or project.root)
     if not framework then
       return false, reason
     end
@@ -68,7 +68,7 @@ return {
   ---@param project live_server.Project
   ---@return string?
   describe_project = function(project)
-    local framework = framework_mod.detect(project.root)
+    local framework = framework_mod.detect(project.workdir or project.root)
     return framework and framework.display or nil
   end,
 
@@ -80,12 +80,12 @@ return {
   ---@param project live_server.Project
   ---@return { path: string, content: string, describe: string[], label: string }?
   requires_consent = function(project)
-    local framework = framework_mod.detect(project.root)
+    local framework = framework_mod.detect(project.workdir or project.root)
     if not framework then
       return nil
     end
     return {
-      path = framework.package_json or (project.root .. "/package.json"),
+      path = framework.package_json or ((project.workdir or project.root) .. "/package.json"),
       content = ("%s\0%s\0%s"):format(framework.script, framework.script_body, framework.package_manager.name),
       describe = framework_mod.describe(framework),
       label = ("%s dev server"):format(framework.display),
@@ -98,7 +98,7 @@ return {
   ---@param project live_server.Project
   ---@return boolean
   live_reload_for = function(project)
-    local framework = framework_mod.detect(project.root)
+    local framework = framework_mod.detect(project.workdir or project.root)
     return framework ~= nil and framework.live_reload
   end,
 
@@ -107,7 +107,7 @@ return {
   ---@param project live_server.Project
   ---@return integer?
   ready_timeout = function(project)
-    local framework = framework_mod.detect(project.root)
+    local framework = framework_mod.detect(project.workdir or project.root)
     return framework and framework.ready_timeout or nil
   end,
 
@@ -120,7 +120,7 @@ return {
   ---@param ctx live_server.SpawnContext
   ---@return { argv: string[], env: table<string, string> }
   build = function(ctx)
-    local framework, reason = framework_mod.detect(ctx.project.root)
+    local framework, reason = framework_mod.detect(ctx.project.workdir or ctx.project.root)
     if not framework then
       error(("this is not a runnable Node project (%s)"):format(reason or "no dev script"), 0)
     end

@@ -145,13 +145,39 @@ local function check_project()
   start("Current project")
   local project = require("live_server.project").get()
   local adapters = require("live_server.adapters")
+  local util = require("live_server.util")
 
   info("root: " .. vim.fn.fnamemodify(project.root, ":~"))
   if project.serve_dir ~= project.root then
     info("serves: " .. vim.fn.fnamemodify(project.serve_dir, ":~"))
   end
 
-  local framework = require("live_server.framework").detect(project.root)
+  local discover = require("live_server.discover")
+  local candidates = discover.candidates(project.root, { refresh = true })
+  local remembered = discover.remembered(project.root)
+
+  if #candidates == 0 then
+    warn("nothing servable found here — no package.json with a dev script, no index.html")
+  elseif #candidates == 1 and candidates[1].relative == "" then
+    ok("servable at the project root")
+  else
+    ok(("%d app%s found inside this repository"):format(#candidates, #candidates == 1 and "" or "s"))
+    for _, candidate in ipairs(candidates) do
+      info(
+        ("  %-28s %s%s"):format(
+          candidate.relative ~= "" and candidate.relative or ".",
+          candidate.label,
+          candidate.dir == remembered and "   (remembered)" or ""
+        )
+      )
+    end
+    if #candidates > 1 and not remembered then
+      info("  `:LiveServer apps` lists these; the first start will ask which one")
+    end
+  end
+
+  local target = candidates[1] and candidates[1].dir or project.root
+  local framework = require("live_server.framework").detect(target)
   if framework then
     ok(("%s detected (%s run %s)"):format(framework.display, framework.package_manager.name, framework.script))
     info(("  %s = %s"):format(framework.script, framework.script_body))
@@ -160,7 +186,8 @@ local function check_project()
       info("  not a recognised framework — `:LiveServer start node` runs it anyway")
     end
 
-    local request = adapters.get("node") and adapters.get("node").requires_consent(project)
+    local targeted = require("live_server.project").derive(project, target)
+    local request = adapters.get("node") and adapters.get("node").requires_consent(targeted)
     if request then
       local decision = require("live_server.trust").decision(request.path, request.content)
       if decision == "allow" then
@@ -175,9 +202,16 @@ local function check_project()
     info("no Node dev server detected here")
   end
 
-  local chosen, err = adapters.resolve(nil, project)
+  local targeted_project = require("live_server.project").derive(project, target)
+  local chosen, err = adapters.resolve(nil, targeted_project)
   if chosen then
-    ok(("`:LiveServer start` here would use %s"):format(adapters.display_for(chosen.name, project)))
+    local where = util.relative(project.root, target)
+    ok(
+      ("`:LiveServer start` here would use %s%s"):format(
+        adapters.display_for(chosen.name, targeted_project),
+        (where and where ~= "") and (" in " .. where) or ""
+      )
+    )
   else
     warn(err or "no adapter fits this project")
   end

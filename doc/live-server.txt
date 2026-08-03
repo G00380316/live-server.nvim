@@ -19,15 +19,16 @@ CONTENTS                                               *live-server-contents*
   6. Project configuration ................ |live-server-project-config|
   7. Server backends ...................... |live-server-adapters|
   8. Node and framework servers ........... |live-server-node|
-  9. Working over SSH ..................... |live-server-remote|
- 10. Security model ....................... |live-server-security|
- 11. Configuration ........................ |live-server-config|
- 12. Lua API .............................. |live-server-api|
- 13. Events ............................... |live-server-events|
- 14. Statusline ........................... |live-server-statusline|
- 15. Highlights ........................... |live-server-highlights|
- 16. Troubleshooting ...................... |live-server-troubleshooting|
- 17. Migrating from 0.x ................... |live-server-migration|
+  9. Finding the app in the repo .......... |live-server-discovery|
+ 10. Working over SSH ..................... |live-server-remote|
+ 11. Security model ....................... |live-server-security|
+ 12. Configuration ........................ |live-server-config|
+ 13. Lua API .............................. |live-server-api|
+ 14. Events ............................... |live-server-events|
+ 15. Statusline ........................... |live-server-statusline|
+ 16. Highlights ........................... |live-server-highlights|
+ 17. Troubleshooting ...................... |live-server-troubleshooting|
+ 18. Migrating from 0.x ................... |live-server-migration|
 
 ==============================================================================
 1. REQUIREMENTS                                    *live-server-requirements*
@@ -122,6 +123,10 @@ Subcommands ~
 :LiveServer unpin [backend]
 :LiveServer pins [prune]
         Manage port pins. See |live-server-ports|.
+
+:LiveServer apps [forget]
+        List the apps found inside this repository (|live-server-discovery|).
+        `forget` clears the remembered choice.
 
 :LiveServer expose
         Restart the server bound to every interface so other devices on the
@@ -416,7 +421,68 @@ Passing extra arguments ~
 or per invocation, through the project file's trusted `args` field.
 
 ==============================================================================
-9. WORKING OVER SSH                                      *live-server-remote*
+9. FINDING THE APP IN THE REPO                        *live-server-discovery*
+
+Root detection stops at the repository, because that is what the rest of the
+editor expects and what a root-locking setup pins to. But a great many repos
+keep the thing you actually run one or two levels down: >
+
+    ~/code/my-repo/          <- .git, and where the root is pinned
+      frontend/package.json  <- the app
+      api/package.json       <- another app
+<
+Rather than moving the root, the plugin looks *downward* for directories that
+can be served, and targets one of them. `:LiveServer toggle` in the repository
+above starts `frontend`, not the repository.
+
+A directory counts if it holds a `package.json` with a dev script, or an
+`index.html`.
+
+Where it looks ~
+
+  1. The root itself. If the root is runnable — a monorepo whose `dev` script
+     is `turbo run dev` — that is the answer and nothing else is searched.
+  2. Declared workspaces: `workspaces` in `package.json` (npm/yarn) or
+     `pnpm-workspace.yaml`. A repository that says where its packages live is
+     always believed over guesswork.
+  3. Otherwise a bounded walk below the root.
+
+The walk never enters `node_modules`, `.git`, build output (`dist`, `.next`,
+`.nuxt`, `.svelte-kit`, `coverage`, `target`, …) or any hidden directory, and
+stops at `discover.depth` levels, `discover.max_results` results and
+`discover.max_dirs` directories visited — whichever comes first. Results are
+cached, so opening the manager repeatedly costs nothing.
+
+Which one gets started ~
+
+When several apps are found, in order:
+
+  1. an explicit directory — `:LiveServer start dir=api`;
+  2. the app containing the buffer you are in, which is the strongest signal
+     available about which one you meant;
+  3. a remembered answer for this repository;
+  4. otherwise you are asked once, and the answer is remembered.
+
+`:LiveServer apps` lists what was found; `:LiveServer apps forget` clears the
+remembered choice.
+
+Two apps, two servers ~
+
+Servers are identified by their working directory, not by the repository, so
+`frontend` and `api` run at the same time on their own ports and with their
+own port pins. The manager groups them under the repository and shows the
+sub-directory beside each one.
+
+Turning it off ~
+>lua
+    require("live_server").setup({
+      discover = { enabled = false },   -- only ever serve the root
+      -- or keep it and just never be asked:
+      discover = { prompt = false },    -- take the shallowest match
+    })
+<
+==============================================================================
+10. WORKING OVER SSH                                     *live-server-remote*
 
 This is where a naive live server plugin quietly fails. The server binds
 loopback *on the remote machine*, `xdg-open` either is missing or opens a
@@ -439,7 +505,7 @@ If you would rather reach the server directly than forward a port, bind it to
 the network with `:LiveServer expose` — read |live-server-security| first.
 
 ==============================================================================
-10. SECURITY MODEL                                      *live-server-security*
+11. SECURITY MODEL                                      *live-server-security*
 
 A dev server serves your working tree, including files you have not committed.
 Two decisions follow from that.
@@ -484,7 +550,7 @@ Additionally ~
 * State files are written with mode 0600.
 
 ==============================================================================
-11. CONFIGURATION                                        *live-server-config*
+12. CONFIGURATION                                        *live-server-config*
 
                                                        *live_server.setup()*
 Call `require("live_server").setup({...})`, or set `vim.g.live_server` to a
@@ -534,6 +600,15 @@ Defaults: >lua
         ignore = { "node_modules", ".git", "dist", "build", "coverage",
                    ".next", ".nuxt", ".cache", "vendor", "target", "__pycache__" },
         delay = 100,
+      },
+
+      discover = {                 -- see |live-server-discovery|
+        enabled = true,
+        depth = 3,
+        max_results = 12,
+        max_dirs = 600,
+        prompt = true,
+        remember = true,
       },
 
       entry_file = nil,            -- SPA fallback document
@@ -587,7 +662,7 @@ Notes ~
   `:LiveServer logs`.
 
 ==============================================================================
-12. LUA API                                                 *live-server-api*
+13. LUA API                                                 *live-server-api*
 
 >lua
     local ls = require("live_server")
@@ -625,7 +700,7 @@ Example — reload a preview when a build finishes: >lua
     end)
 <
 ==============================================================================
-13. EVENTS                                               *live-server-events*
+14. EVENTS                                               *live-server-events*
 
 Every state change fires both a Lua event and a |User| autocommand named
 `LiveServer<Event>`, whose `data` is the server's `:info()` table.
@@ -648,7 +723,7 @@ Example: >lua
     })
 <
 ==============================================================================
-14. STATUSLINE                                       *live-server-statusline*
+15. STATUSLINE                                       *live-server-statusline*
 
 >lua
     -- lualine
@@ -664,7 +739,7 @@ on every redraw costs nothing. Pass `{ global = true }` to count every
 project rather than the current one.
 
 ==============================================================================
-15. HIGHLIGHTS                                       *live-server-highlights*
+16. HIGHLIGHTS                                       *live-server-highlights*
 
 Every group is defined with `default link`, so your colorscheme wins and you
 can override any of them through `ui.highlights`.
@@ -699,7 +774,7 @@ Example: >lua
     })
 <
 ==============================================================================
-16. TROUBLESHOOTING                             *live-server-troubleshooting*
+17. TROUBLESHOOTING                             *live-server-troubleshooting*
 
 Start with `:checkhealth live_server`. It reports the Neovim version, which
 backends are installed and at what version, how many ports in your range are
@@ -719,6 +794,16 @@ The port keeps changing ~
     Something else is taking the preferred port first. `:LiveServer pin 4000`
     fixes a port for the project, and the message on fallback names the
     process that held the old one.
+
+It says there is nothing to serve, but my app is right there ~
+    The app is probably below the repository root and discovery is off or too
+    shallow. `:checkhealth live_server` lists what it found; raise
+    `discover.depth` or pass the directory: `:LiveServer start dir=frontend`.
+
+It keeps asking which app to start ~
+    Answer once with `discover.remember = true` (the default), or set
+    `discover.prompt = false` to always take the shallowest.
+    `:LiveServer apps forget` resets a remembered answer.
 
 It ran my build script instead of serving files ~
     `auto` only picks the `node` backend for a recognised framework, so this
@@ -748,7 +833,7 @@ Filing a bug ~
     `log = { level = "debug" }`, reproduce, then attach `:LiveServer log`.
 
 ==============================================================================
-17. MIGRATING FROM 0.X                                *live-server-migration*
+18. MIGRATING FROM 0.X                                *live-server-migration*
 
 Everything from the previous version still works. The old commands and the
 `live_server.core` / `live_server.utils` modules forward to the new API and

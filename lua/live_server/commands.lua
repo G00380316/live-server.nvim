@@ -338,6 +338,41 @@ subcommands.pins = {
   end,
 }
 
+subcommands.apps = {
+  desc = "List the apps discovered inside this repository",
+  run = function(args)
+    local discover = require("live_server.discover")
+    local project = require("live_server.project").get()
+
+    if args.positional[1] == "forget" then
+      local removed = discover.forget(project.root)
+      log.notify(removed and "Forgot the remembered app for this repository." or "Nothing was remembered.", "info")
+      return
+    end
+
+    local candidates = discover.candidates(project.root, { refresh = true })
+    if #candidates == 0 then
+      log.notify(("Nothing servable found in %s."):format(project.name), "info")
+      return
+    end
+
+    local remembered = discover.remembered(project.root)
+    local lines = {}
+    for _, candidate in ipairs(candidates) do
+      lines[#lines + 1] = ("%-30s %-14s %s%s"):format(
+        candidate.relative ~= "" and candidate.relative or ".",
+        candidate.kind,
+        candidate.label,
+        candidate.dir == remembered and "   (remembered)" or ""
+      )
+    end
+    log.notify(table.concat(lines, "\n"), "info")
+  end,
+  complete = function()
+    return { "forget" }
+  end,
+}
+
 subcommands.expose = {
   desc = "Restart a server bound to the local network",
   run = function()
@@ -350,7 +385,7 @@ subcommands.expose = {
         manager.forget(server)
         manager.start({
           adapter = server.adapter.name,
-          dir = server.project.root,
+          dir = server.project.workdir,
           port = server.port,
           expose = not was_exposed,
         })

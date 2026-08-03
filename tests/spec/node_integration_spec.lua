@@ -263,3 +263,125 @@ t.describe("node adapter consent", function()
     config.setup({})
   end)
 end)
+
+t.describe("nested project layouts", function()
+  --- The layout this feature exists for: the editor pins the root to the git
+  --- directory and the app lives inside it.
+  ---@param apps table<string, string> relative dir -> server.js body
+  ---@return string root
+  local function nested_repo(apps)
+    local root = util.normalize(vim.fn.tempname())
+    vim.fn.mkdir(root .. "/.git", "p")
+    util.write_file(root .. "/.git/HEAD", "ref: refs/heads/main")
+    util.write_file(root .. "/README.md", "# repo")
+    for dir, body in pairs(apps) do
+      vim.fn.mkdir(root .. "/" .. dir, "p")
+      util.write_file(root .. "/" .. dir .. "/server.js", body)
+      util.write_file(
+        root .. "/" .. dir .. "/package.json",
+        ('{"name":"%s","private":true,"scripts":{"dev":"node server.js"}}'):format(dir:gsub("/", "-"))
+      )
+    end
+    require("live_server.discover").invalidate()
+    framework.invalidate()
+    project_mod.invalidate()
+    return root
+  end
+
+  local function configure(overrides)
+    config.did_setup = false
+    config.setup(vim.tbl_extend("force", {
+      server = "node",
+      browser = { auto_open = false },
+      detect_orphans = false,
+      restart = { on_crash = false },
+      project = { trust = "allow" },
+      discover = { prompt = false },
+      port = { strategy = "scan", range = { 5900, 5935 }, remember = false },
+      ready = { timeout = 30000 },
+    }, overrides or {}))
+  end
+
+  t.it("starts the app inside the repository, not the repository", function()
+    configure()
+    local root = nested_repo({ ["my-app"] = RESPECTS_PORT })
+
+    local started, failure = nil, nil
+    manager.start({ dir = root }, function(server, err)
+      started, failure = server, err
+    end)
+    t.truthy(
+      vim.wait(40000, function()
+        return started ~= nil or failure ~= nil
+      end, 100),
+      "start never completed"
+    )
+    t.truthy(started, "failed to start the nested app: " .. tostring(failure))
+
+    t.eq(started.project.root, root, "the repository is still the project root")
+    t.eq(started.project.workdir, root .. "/my-app", "but the server runs in the app directory")
+    t.contains(started.project.name, "my-app")
+
+    if util.executable("curl") then
+      local code = vim.trim(vim.fn.system({ "curl", "-fsS", "-o", "/dev/null", "-w", "%{http_code}", started:url() }))
+      t.eq(code, "200")
+    end
+    stop(started)
+  end)
+
+  t.it("runs two apps from one repository at once", function()
+    configure()
+    local root = nested_repo({ frontend = RESPECTS_PORT, api = RESPECTS_PORT })
+
+    local first = nil
+    manager.start({ dir = root .. "/frontend" }, function(server)
+      first = server
+    end)
+    t.truthy(vim.wait(40000, function()
+      return first ~= nil
+    end, 100))
+
+    local second = nil
+    manager.start({ dir = root .. "/api" }, function(server)
+      second = server
+    end)
+    t.truthy(vim.wait(40000, function()
+      return second ~= nil
+    end, 100))
+
+    t.truthy(second, "the second app should start, not be deduplicated against the first")
+    t.falsy(rawequal(first, second))
+    t.neq(first.port, second.port)
+    t.eq(#manager.for_project(root, { active_only = true }), 2, "both belong to the same repository")
+
+    stop(first)
+    stop(second)
+  end)
+
+  t.it("deduplicates per app, not per repository", function()
+    configure()
+    local root = nested_repo({ frontend = RESPECTS_PORT })
+
+    local first = nil
+    manager.start({ dir = root .. "/frontend" }, function(server)
+      first = server
+    end)
+    t.truthy(vim.wait(40000, function()
+      return first ~= nil
+    end, 100))
+
+    local again = nil
+    manager.start({ dir = root .. "/frontend" }, function(server)
+      again = server
+    end)
+    t.truthy(vim.wait(5000, function()
+      return again ~= nil
+    end, 50))
+    t.truthy(rawequal(first, again), "starting the same app twice must return the existing server")
+
+    stop(first)
+  end)
+
+  config.did_setup = false
+  config.setup({})
+end)

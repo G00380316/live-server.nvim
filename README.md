@@ -181,6 +181,55 @@ won't ask again, but changing what `dev` runs will.
 `start` script is `node build.js` is a build step, not a web server; `auto` falls through
 to a static server, and `:LiveServer start node` runs it anyway if that's what you meant.
 
+## When the app isn't at the repo root
+
+Plenty of repositories keep the thing you actually run one or two levels down —
+and plenty of Neovim setups pin the project root to the git directory, so the
+`package.json` never gets found:
+
+```
+~/code/my-repo/          <- .git, and where the root is pinned
+  frontend/package.json  <- the app
+  api/package.json       <- another app
+```
+
+`:LiveServer toggle` here starts `frontend`, not the repository. A directory counts
+if it has a `package.json` with a dev script, or an `index.html`.
+
+**Where it looks**, in order:
+
+1. **The root itself** — if it's runnable (a monorepo whose `dev` is `turbo run dev`),
+   that's the answer and nothing else is searched.
+2. **Declared workspaces** — `workspaces` in `package.json`, or `pnpm-workspace.yaml`.
+   A repo that says where its packages live is always believed over guesswork.
+3. **A bounded walk** below the root — never into `node_modules`, `.git`, build output
+   or hidden directories, and capped on depth, results and directories visited.
+
+**Which one starts** when several are found: an explicit `dir=`, then the app containing
+the buffer you're in, then a remembered answer, then it asks you once.
+
+```vim
+:LiveServer apps          " list what was found
+:LiveServer apps forget   " clear the remembered choice
+:LiveServer start dir=api " skip the question entirely
+```
+
+**Two apps, two servers.** Servers are identified by their working directory, not the
+repository, so `frontend` and `api` run at once on their own ports with their own pins:
+
+```
+ 2 running
+
+  ~/code/my-repo
+  ● Vite         frontend  running    :5173   up 8m    pinned
+     http://127.0.0.1:5173/
+  ● Node server  api       running    :3000   up 8m    no reload
+     http://127.0.0.1:3000/
+```
+
+Turn it off with `discover = { enabled = false }`, or keep it and never be asked with
+`discover = { prompt = false }`.
+
 ## Ports that stay put
 
 By default the port a project ends up with is remembered and reused forever:
@@ -285,6 +334,13 @@ require("live_server").setup({
   browser = {
     auto_open = true,
     open_current_file = true, -- open the page for the buffer you are in
+  },
+
+  discover = {
+    enabled = true,           -- find apps below the repo root
+    depth = 3,
+    prompt = true,            -- ask when several are found
+    remember = true,
   },
 
   ui = {

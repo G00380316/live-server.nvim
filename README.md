@@ -214,17 +214,41 @@ the buffer you're in, then a remembered answer, then it asks you once.
 :LiveServer start dir=api " skip the question entirely
 ```
 
-**Two apps, two servers.** Servers are identified by their working directory, not the
-repository, so `frontend` and `api` run at once on their own ports with their own pins:
+**Every service at once.** Servers are identified by their working directory, not the
+repository, so they all run together, each on its own port with its own pin:
+
+```vim
+:LiveServer start all     " or `A` in the manager
+```
+
+One consent prompt covers the whole set — it lists every command in full, and each
+answer is still recorded against that command alone, so editing any one script asks
+again. A repo like this works as you'd expect, including the socket servers nested
+*inside* the API directories:
+
+```
+my-project/
+  web/                Next.js frontend
+  server/             Express API
+  server/socket/      socket.io server, inside the API directory
+  ai_server/          a second Express API
+  ai_server/socket/   its socket server
+```
+
+`socket.io`/`ws` processes are recognised as **Socket servers**: readiness and ports
+work normally, but no browser opens at them — there's no page there. A server with
+*both* Express and socket.io is an HTTP server with sockets attached, and is treated
+as one.
 
 ```
  2 running
 
   ~/code/my-repo
-  ● Vite         frontend  running    :5173   up 8m    pinned
-     http://127.0.0.1:5173/
-  ● Node server  api       running    :3000   up 8m    no reload
-     http://127.0.0.1:3000/
+  ● Next.js        web                running   :3000  up 8m   pinned
+  ● Node server    server             running   :3001  up 8m   no reload
+  ● Socket server  server/socket      running   :3002  up 8m   no reload
+  ● Node server    ai_server          running   :3003  up 8m   no reload
+  ● Socket server  ai_server/socket   running   :3004  up 8m   no reload
 ```
 
 Turn it off with `discover = { enabled = false }`, or keep it and never be asked with

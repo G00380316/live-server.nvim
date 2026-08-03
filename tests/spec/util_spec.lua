@@ -225,3 +225,28 @@ t.describe("util path display", function()
     end
   end)
 end)
+
+t.describe("util.normalize on paths that do not exist yet", function()
+  t.it("canonicalises consistently at any depth", function()
+    -- Regression: only the immediate parent used to be resolved, so with a
+    -- symlinked temp directory `/tmp/repo` became `/private/tmp/repo` while
+    -- `/tmp/repo/app` stayed as written — and the two stopped comparing as
+    -- parent and child.
+    local base = util.normalize("/tmp")
+    t.eq(util.normalize("/tmp/nope"), base .. "/nope")
+    t.eq(util.normalize("/tmp/nope/deeper"), base .. "/nope/deeper")
+    t.eq(util.normalize("/tmp/nope/deeper/still"), base .. "/nope/deeper/still")
+  end)
+
+  t.it("keeps containment working for missing paths", function()
+    t.truthy(util.is_within("/tmp/repo", "/tmp/repo/server"))
+    t.truthy(util.is_within("/tmp/repo", "/tmp/repo/server/socket"))
+    t.falsy(util.is_within("/tmp/repo", "/tmp/repo-other/server"))
+    t.eq(util.relative("/tmp/repo", "/tmp/repo/server/socket"), "server/socket")
+  end)
+
+  t.it("is still idempotent", function()
+    local once = util.normalize("/tmp/a/b/c")
+    t.eq(util.normalize(once), once)
+  end)
+end)

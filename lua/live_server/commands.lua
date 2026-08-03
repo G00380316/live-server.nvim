@@ -115,12 +115,17 @@ end
 local subcommands = {}
 
 subcommands.start = {
-  desc = "Start a server for the current project",
+  desc = "Start a server (`all` starts every app in the repository)",
   run = function(args)
+    if args.positional[1] == "all" or args.flags.all then
+      table.remove(args.positional, 1)
+      manager.start_all(start_opts(args))
+      return
+    end
     manager.start(start_opts(args))
   end,
   complete = function()
-    local out = { "auto" }
+    local out = { "all", "auto" }
     vim.list_extend(out, require("live_server.adapters").names())
     vim.list_extend(out, { "port=", "dir=", "expose", "no-open" })
     return out

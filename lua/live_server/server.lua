@@ -184,6 +184,19 @@ function Server:has_live_reload()
   return self.adapter.live_reload == true
 end
 
+--- Whether there is a page worth opening. A socket server listens on a port
+--- but answers WebSocket handshakes, not requests for `/`.
+---@return boolean
+function Server:serves_pages()
+  if type(self.adapter.serves_pages) == "function" then
+    local ok, value = pcall(self.adapter.serves_pages, self.project)
+    if ok and type(value) == "boolean" then
+      return value
+    end
+  end
+  return true
+end
+
 ---@return integer milliseconds since the process started
 function Server:uptime()
   if not self.started_at then
@@ -218,6 +231,7 @@ function Server:info()
     restarts = self.restarts,
     exposed = self.exposed,
     live_reload = self:has_live_reload(),
+    serves_pages = self:serves_pages(),
     display = self:display_name(),
   }
 end
@@ -244,13 +258,32 @@ end
 --- the port it reported rather than reporting a working server as dead.
 ---@param line string
 function Server:_check_port_drift(line)
-  if self.status ~= "starting" or not self.adapter.url_pattern then
+  if self.status ~= "starting" then
     return
   end
 
-  local found = line:match(self.adapter.url_pattern)
-  local detected = tonumber(found)
+  ---@type integer?
+  local detected
+  ---@type boolean
+  local confident = false
+
+  if self.adapter.url_pattern then
+    detected = tonumber(line:match(self.adapter.url_pattern))
+    confident = detected ~= nil
+  end
+  if not detected and self.adapter.port_pattern then
+    detected = tonumber(line:match(self.adapter.port_pattern))
+  end
+
   if not detected or detected == self.port or not net.valid_port(detected) then
+    return
+  end
+
+  -- A bare port number is ambiguous: "port 5000 is in use" mentions a port the
+  -- process is *not* using. Only follow it once our own port has visibly failed
+  -- to come up, where being wrong costs nothing and being right is the
+  -- difference between a working server and a false "no answer".
+  if not confident and net.is_listening(self.host, self.port, 150) then
     return
   end
 

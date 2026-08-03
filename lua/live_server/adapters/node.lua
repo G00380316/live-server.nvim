@@ -111,11 +111,25 @@ return {
     return framework and framework.ready_timeout or nil
   end,
 
+  --- A socket server listens on a port but serves no page, so there is nothing
+  --- to open a browser at.
+  ---@param project live_server.Project
+  ---@return boolean
+  serves_pages = function(project)
+    local framework = framework_mod.detect(project.workdir or project.root)
+    return not (framework and framework.realtime)
+  end,
+
   --- Dev servers announce the address they actually bound. When that disagrees
   --- with what we asked for — an Express app with a hard-coded `listen(4000)`,
   --- or a framework that walked to the next free port — believe the process,
   --- not our intent.
+  ---
+  --- A printed URL is unambiguous. A bare "port 5000" is not — it appears just
+  --- as often in "port 5000 is in use" — so it is treated as a weaker signal
+  --- and only acted on when our own port is not answering.
   url_pattern = "https?://[%w%.%-%[%]]+:(%d+)",
+  port_pattern = "[Pp]ort%s*:?%s+(%d+)",
 
   ---@param ctx live_server.SpawnContext
   ---@return { argv: string[], env: table<string, string> }

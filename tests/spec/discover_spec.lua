@@ -323,3 +323,72 @@ t.describe("discovery cost", function()
     t.truthy(rawequal(first, second), "a second call within the window should reuse the scan")
   end)
 end)
+
+t.describe("a repository of several services", function()
+  --- The shape of MyFaithPal-FYP: a Next.js frontend, two Express servers, and
+  --- a socket server nested inside each of them.
+  ---@return string root
+  local function services_repo()
+    return repo({
+      ["my-faithpal/package.json"] = '{"dependencies":{"next":"14","ws":"8"},"scripts":{"dev":"next dev"}}',
+      ["my-faithpal_server/package.json"] = '{"dependencies":{"express":"4"},"scripts":{"start":"nodemon server.js"}}',
+      ["my-faithpal_server/socket/package.json"] = '{"dependencies":{"socket.io":"4"},"scripts":{"start":"nodemon socket.js"}}',
+      ["my-faithpal_ai_server/package.json"] = '{"dependencies":{"express":"4"},"scripts":{"start":"nodemon server.js"}}',
+      ["my-faithpal_ai_server/socket/package.json"] = '{"dependencies":{"socket.io":"4"},"scripts":{"start":"nodemon socketAI.js"}}',
+    })
+  end
+
+  t.it("finds every service, including ones nested inside another", function()
+    reset()
+    local found = relatives(services_repo())
+    t.eq(#found, 5)
+    for _, expected in ipairs({
+      "my-faithpal",
+      "my-faithpal_server",
+      "my-faithpal_ai_server",
+      "my-faithpal_server/socket",
+      "my-faithpal_ai_server/socket",
+    }) do
+      t.includes(found, expected)
+    end
+  end)
+
+  t.it("labels each one by what it is", function()
+    reset()
+    local labels = {}
+    for _, candidate in ipairs(discover.candidates(services_repo(), { refresh = true })) do
+      labels[candidate.relative] = candidate.label
+    end
+    t.eq(labels["my-faithpal"], "Next.js")
+    t.eq(labels["my-faithpal_server"], "Node server")
+    t.eq(labels["my-faithpal_server/socket"], "Socket server")
+    t.eq(labels["my-faithpal_ai_server/socket"], "Socket server")
+  end)
+
+  t.it("offers every service to `auto`", function()
+    reset()
+    local adapters = require("live_server.adapters")
+    local root = services_repo()
+    local base = project_mod.get(root)
+    for _, candidate in ipairs(discover.candidates(root, { refresh = true })) do
+      local derived = project_mod.derive(base, candidate.dir)
+      t.truthy(
+        adapters.suits_project("node", derived),
+        candidate.relative .. " should be startable without naming the adapter"
+      )
+    end
+  end)
+
+  t.it("gives each service its own identity", function()
+    reset()
+    local root = services_repo()
+    local base = project_mod.get(root)
+    local seen = {}
+    for _, candidate in ipairs(discover.candidates(root, { refresh = true })) do
+      local derived = project_mod.derive(base, candidate.dir)
+      t.falsy(seen[derived.workdir], "two services must not share a working directory")
+      seen[derived.workdir] = true
+      t.eq(derived.root, root, "they all still belong to one repository")
+    end
+  end)
+end)

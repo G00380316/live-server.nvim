@@ -298,6 +298,7 @@ local defaults = {
       change_port = "p",
       pin_port = "P",
       new = "a",
+      start_all = "A",
       delete = "d",
       refresh = "R",
       expose = "e",

@@ -258,3 +258,33 @@ t.describe("auto-selection scope", function()
     t.falsy(adapters.suits_project("node", project_mod.get(root)))
   end)
 end)
+
+t.describe("realtime servers", function()
+  t.it("recognises a socket-only server", function()
+    local root = project('{"dependencies":{"socket.io":"4"},"scripts":{"start":"node socket.js"}}')
+    local detected = framework.detect(root)
+    t.eq(detected.name, "socket_server")
+    t.truthy(detected.realtime, "there is no page to open at a socket endpoint")
+    t.falsy(detected.live_reload)
+    t.eq(detected.port_style, "env")
+  end)
+
+  t.it("recognises a bare ws server", function()
+    t.eq(framework.detect(project('{"dependencies":{"ws":"8"},"scripts":{"start":"node s.js"}}')).name, "socket_server")
+  end)
+
+  t.it("calls an Express app with sockets an HTTP server", function()
+    -- It serves routes as well as sockets, so it does have pages.
+    local root = project('{"dependencies":{"express":"4","socket.io":"4"},"scripts":{"start":"node server.js"}}')
+    local detected = framework.detect(root)
+    t.eq(detected.name, "node_server")
+    t.falsy(detected.realtime)
+  end)
+
+  t.it("does not mistake a Next.js frontend that depends on ws", function()
+    -- MyFaithPal's frontend has both; `next` must win.
+    local root = project('{"dependencies":{"next":"14","ws":"8"},"scripts":{"dev":"next dev"}}')
+    t.eq(framework.detect(root).name, "nextjs")
+    t.falsy(framework.detect(root).realtime)
+  end)
+end)

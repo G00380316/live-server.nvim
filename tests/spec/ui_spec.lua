@@ -349,3 +349,99 @@ t.describe("0.x compatibility", function()
     require("live_server").setup({})
   end)
 end)
+
+t.describe("dashboard with several services in one repo", function()
+  local project_mod = require("live_server.project")
+
+  --- Two servers whose directory names share a long prefix — the case that
+  --- silently rendered them as the same string.
+  ---@return live_server.Server[]
+  local function ambiguous_servers()
+    local base = {
+      root = "/tmp/repo",
+      name = "repo",
+      workdir = "/tmp/repo",
+      serve_dir = "/tmp/repo",
+      config = {},
+      privileged = {},
+    }
+    local out = {}
+    for index, dir in ipairs({ "my-faithpal_server", "my-faithpal_ai_server", "my-faithpal_server/socket" }) do
+      local project = vim.tbl_extend("force", {}, base)
+      project.workdir = "/tmp/repo/" .. dir
+      local server = server_mod.new({
+        adapter = adapters.get("live_server"),
+        project = project,
+        host = "127.0.0.1",
+        port = 6100 + index,
+      })
+      server.status = "running"
+      server.started_at = require("live_server.util").now()
+      server.ready_at = server.started_at
+      out[#out + 1] = server
+    end
+    return out
+  end
+
+  t.it("renders each service distinguishably", function()
+    manager.reset()
+    local original = manager.servers
+    local servers = ambiguous_servers()
+    manager.servers = function()
+      return servers
+    end
+
+    dashboard.open()
+    local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_get_current_buf(), 0, -1, false)
+    dashboard.close()
+    manager.servers = original
+
+    local server_rows = {}
+    for _, line in ipairs(lines) do
+      -- A server row, not the "3 running" summary: it carries a port column.
+      if line:find("running", 1, true) and line:match(":%d+") then
+        server_rows[#server_rows + 1] = line
+      end
+    end
+    t.eq(#server_rows, 3)
+
+    local seen = {}
+    for _, line in ipairs(server_rows) do
+      -- Ignore the port, which is trivially unique; the *name* must identify
+      -- the service on its own.
+      local without_port = line:gsub(":%d+", "")
+      t.falsy(seen[without_port], "two services render identically: " .. line)
+      seen[without_port] = true
+    end
+  end)
+
+  t.it("still groups them under one repository", function()
+    manager.reset()
+    local original = manager.servers
+    local servers = ambiguous_servers()
+    manager.servers = function()
+      return servers
+    end
+
+    dashboard.open()
+    local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_get_current_buf(), 0, -1, false)
+    dashboard.close()
+    manager.servers = original
+
+    local headers = 0
+    for _, line in ipairs(lines) do
+      if line:match("^%s*[%w/]*%s*repo%s") or line:find(" repo ", 1, true) then
+        headers = headers + 1
+      end
+    end
+    t.truthy(headers >= 1, "expected a single repository heading")
+  end)
+
+  t.it("derives a distinct name per service", function()
+    local base = { root = "/tmp/repo", name = "repo", workdir = "/tmp/repo", serve_dir = "/tmp/repo", config = {} }
+    local a = project_mod.derive(base, "/tmp/repo/server")
+    local b = project_mod.derive(base, "/tmp/repo/server/socket")
+    t.neq(a.name, b.name)
+    t.neq(a.workdir, b.workdir)
+  end)
+end)

@@ -125,6 +125,14 @@ function M.stop(server)
   end
 end
 
+--- Start every app discovered in the current repository, asking for consent
+--- once for all of them.
+---@param opts? live_server.StartOpts
+---@param callback? fun(started: live_server.Server[], failures: string[])
+function M.start_all(opts, callback)
+  require("live_server.manager").start_all(opts, callback)
+end
+
 --- Stop every managed server.
 ---@return integer stopped
 function M.stop_all()

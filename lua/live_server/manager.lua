@@ -449,7 +449,14 @@ function M._start_consented(opts, project, adapter, cfg, callback)
         if should_open == nil then
           should_open = cfg.browser.auto_open
         end
-        if should_open then
+        if should_open and not server:serves_pages() then
+          -- Nothing to show: say so once rather than opening a tab onto a
+          -- WebSocket endpoint.
+          log.notify(
+            ("%s has no page to open — it is listening on %d."):format(server:display_name(), server.port),
+            "info"
+          )
+        elseif should_open then
           require("live_server.browser").open(server)
         elseif require("live_server.remote").is_remote() then
           require("live_server.remote").announce(server)
@@ -465,6 +472,92 @@ function M._start_consented(opts, project, adapter, cfg, callback)
         callback(server, nil)
       end)
     end)
+  end)
+end
+
+--- Start every app discovered in this repository.
+---
+--- The reason this exists: a repository is often several processes that are
+--- only useful together — a frontend, an API, a socket server. Starting them
+--- one prompt at a time is the difference between a tool you use and a tool you
+--- work around.
+---@param opts? live_server.StartOpts
+---@param callback? fun(started: live_server.Server[], failures: string[])
+function M.start_all(opts, callback)
+  opts = opts or {}
+  callback = callback or function() end
+
+  local base = project_mod.get(opts.dir)
+  local candidates = discover.candidates(opts.dir and util.normalize(opts.dir) or base.root, { refresh = true })
+
+  if #candidates == 0 then
+    log.notify(("Nothing servable found in %s."):format(base.name), "warn")
+    return callback({}, {})
+  end
+
+  -- Work out what needs consent up front, so the user answers once for the
+  -- whole repository instead of once per app.
+  ---@type table[]
+  local requests = {}
+  ---@type table<string, live_server.Project>
+  local projects = {}
+  for _, candidate in ipairs(candidates) do
+    local project = project_mod.derive(base, candidate.dir)
+    projects[candidate.dir] = project
+    local adapter = adapters.resolve(opts.adapter or project.config.server or config().server, project)
+    if adapter and type(adapter.requires_consent) == "function" then
+      local ok, request = pcall(adapter.requires_consent, project)
+      if ok and type(request) == "table" and request.path then
+        requests[#requests + 1] = request
+      end
+    end
+  end
+
+  trust.request_batch(requests, function(decisions)
+    local started, failures = {}, {}
+    local index = 0
+
+    -- Sequential: notifications stay readable, and a shared consent answer is
+    -- already settled so nothing else can block mid-run.
+    local function next_one()
+      index = index + 1
+      local candidate = candidates[index]
+      if not candidate then
+        if #started > 0 then
+          log.notify(
+            ("Started %d of %d app%s in %s."):format(#started, #candidates, #candidates == 1 and "" or "s", base.name),
+            #failures > 0 and "warn" or "info"
+          )
+        end
+        return callback(started, failures)
+      end
+
+      local project = projects[candidate.dir]
+      local adapter = adapters.resolve(opts.adapter or project.config.server or config().server, project)
+      if adapter and type(adapter.requires_consent) == "function" then
+        local ok, request = pcall(adapter.requires_consent, project)
+        if ok and type(request) == "table" and request.path then
+          if decisions[trust.key(request.path, request.content)] == false then
+            failures[#failures + 1] = ("%s: consent declined"):format(candidate.relative)
+            return next_one()
+          end
+        end
+      end
+
+      M._start_in(vim.tbl_extend("force", opts, { dir = nil, open = false }), project, config(), function(server, err)
+        if server then
+          started[#started + 1] = server
+        else
+          failures[#failures + 1] = ("%s: %s"):format(
+            candidate.relative ~= "" and candidate.relative or ".",
+            err or "failed"
+          )
+        end
+        next_one()
+      end)
+    end
+
+    next_one()
   end)
 end
 

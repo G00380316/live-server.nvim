@@ -185,6 +185,77 @@ function M.request_command(opts, callback)
   end)
 end
 
+--- Ask about several commands at once, for "start everything in this
+--- repository".
+---
+--- Batching the *prompt* does not weaken the model: every command is listed in
+--- full, and the answer is still recorded against each command's own content,
+--- so editing any one of them asks again. Five separate modals for one keypress
+--- would train people to approve without reading, which is worse.
+---@param requests { path: string, content: string, describe: string[], label: string }[]
+---@param callback fun(granted: table<string, boolean>) keyed by request path+content
+function M.request_batch(requests, callback)
+  ---@type table<string, boolean>
+  local decisions = {}
+  ---@type table[]
+  local pending = {}
+
+  for _, request in ipairs(requests) do
+    local key = record_key(request.path, request.content)
+    local decision = M.decision(request.path, request.content)
+    if decision == "allow" then
+      decisions[key] = true
+    elseif decision == "deny" then
+      decisions[key] = false
+    else
+      pending[#pending + 1] = request
+    end
+  end
+
+  if #pending == 0 then
+    return callback(decisions)
+  end
+  if #pending == 1 then
+    local request = pending[1]
+    return M.request_command(request, function(granted)
+      decisions[record_key(request.path, request.content)] = granted
+      callback(decisions)
+    end)
+  end
+
+  local lines = { ("Run %d commands defined by this repository?"):format(#pending), "" }
+  for _, request in ipairs(pending) do
+    lines[#lines + 1] = ("%s  (%s)"):format(request.label, vim.fn.fnamemodify(request.path, ":~:."))
+    vim.list_extend(lines, request.describe)
+    lines[#lines + 1] = ""
+  end
+  lines[#lines + 1] = "This executes code from the repository."
+
+  vim.ui.select({
+    "Deny — run none of them",
+    "Allow once (this session)",
+    "Allow and remember these commands",
+  }, { prompt = table.concat(lines, "\n") }, function(choice)
+    local granted = choice ~= nil and choice:match("^Allow") ~= nil
+    local remember = choice ~= nil and choice:match("^Allow and remember") ~= nil
+    for _, request in ipairs(pending) do
+      decisions[record_key(request.path, request.content)] = granted
+      if remember or not granted then
+        M.record(request.path, request.content, granted and "allow" or "deny")
+      end
+    end
+    callback(decisions)
+  end)
+end
+
+--- Key identifying a consent decision, so callers can look one up.
+---@param path string
+---@param content string
+---@return string
+function M.key(path, content)
+  return record_key(path, content)
+end
+
 --- Resolve trust for a project, prompting only when a decision is genuinely
 --- needed. `callback(granted)` runs on the main loop.
 ---@param project live_server.Project

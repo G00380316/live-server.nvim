@@ -181,7 +181,9 @@ local function build_rows(servers, width)
   adapter_width = math.floor(util.clamp(adapter_width, 6, math.max(10, width * 0.25)))
   -- Only as wide as it needs to be, and zero when every server sits at its
   -- repository root — the common case must not pay for the monorepo one.
-  sub_width = math.floor(math.min(sub_width, math.max(8, width * 0.2)))
+  -- Generous, because this column is what tells `api` from `api/socket`, and a
+  -- cap that collapses two names to the same string is worse than no column.
+  sub_width = math.floor(math.min(sub_width, math.max(12, width * 0.34)))
 
   ---@type table<string, live_server.Server[]>
   local grouped, order = {}, {}
@@ -227,23 +229,29 @@ local function build_rows(servers, width)
       )
       if sub_width > 0 then
         local sub = util.relative(server.project.root, server.project.workdir) or ""
-        text = append(text, server_marks, util.pad(util.truncate(sub, sub_width), sub_width + 2), "LiveServerProject")
+        -- Truncate from the left: `…_ai_server/socket` still identifies the
+        -- app, where `my-faithpal_…` is the same string for three of them.
+        text =
+          append(text, server_marks, util.pad(util.truncate_left(sub, sub_width), sub_width + 2), "LiveServerProject")
       end
       text = append(text, server_marks, util.pad(STATUS_LABEL[server.status] or server.status, 11), glyph_group)
       text = append(text, server_marks, util.pad(":" .. server.port, port_width + 3), "LiveServerPort")
 
-      if server:is_active() and server.ready_at then
-        text = append(text, server_marks, util.pad("up " .. util.duration(server:uptime()), 9), "LiveServerHint")
-      else
-        text = append(text, server_marks, util.pad("", 9), "LiveServerHint")
-      end
-
       local badge_list = badges(server)
-      if #badge_list > 0 then
-        local badge_text = table.concat(badge_list, "  ")
-        if util.width(text) + util.width(badge_text) + 2 <= width then
-          text = append(text, server_marks, badge_text, "LiveServerBadge")
-        end
+      local badge_text = #badge_list > 0 and table.concat(badge_list, "  ") or ""
+      local uptime = (server:is_active() and server.ready_at) and ("up " .. util.duration(server:uptime())) or ""
+
+      -- Pad the uptime column only while the badges still fit after it.
+      -- Alignment is worth less than telling the user a server has no live
+      -- reload, so the padding yields first.
+      local uptime_width = 9
+      if badge_text ~= "" and util.width(text) + uptime_width + util.width(badge_text) + 2 > width then
+        uptime_width = util.width(uptime) + (uptime ~= "" and 2 or 0)
+      end
+      text = append(text, server_marks, util.pad(uptime, uptime_width), "LiveServerHint")
+
+      if badge_text ~= "" and util.width(text) + util.width(badge_text) <= width then
+        text = append(text, server_marks, badge_text, "LiveServerBadge")
       end
 
       rows[#rows + 1] = row(text, "server", { server = server, marks = server_marks })
@@ -561,6 +569,15 @@ local function action_new()
   end)
 end
 
+local function action_start_all()
+  local project = project_mod.get()
+  prompt.confirm(("Start every app in %s?"):format(project.name), {}, function(confirmed)
+    if confirmed then
+      manager.start_all({})
+    end
+  end)
+end
+
 local function action_delete()
   local server = require_server("Move to a server to remove it.")
   if not server then
@@ -656,6 +673,7 @@ local function action_help()
     { label(keys.logs), "Show the process output" },
     { label(keys.yank_url), "Copy the URL to the clipboard" },
     { label(keys.new), "Start a new server here" },
+    { label(keys.start_all), "Start every app in this repository" },
     { label(keys.delete), "Stop and remove the entry" },
     { label(keys.expose), "Toggle exposing it on the local network" },
     { label(keys.forward_hint), "Show the ssh port-forwarding command" },
@@ -740,6 +758,7 @@ function M.open()
   window:map(keys.change_port, action_change_port, "Change port")
   window:map(keys.pin_port, action_pin, "Pin/unpin port")
   window:map(keys.new, action_new, "Start a new server")
+  window:map(keys.start_all, action_start_all, "Start every app here")
   window:map(keys.delete, action_delete, "Stop and remove")
   window:map(keys.expose, action_expose, "Toggle network exposure")
   window:map(keys.forward_hint, action_forward_hint, "SSH forwarding command")

@@ -334,15 +334,30 @@ function M.normalize(path)
 
   local resolved = M.uv.fs_realpath(normalized)
   if not resolved then
-    -- The leaf may not exist yet (a port pin for a directory about to be
-    -- created, a page that has not been written). Resolve the parent so at
-    -- least the existing part of the path is canonical.
-    local parent = vim.fs.dirname(normalized)
-    if parent and parent ~= normalized then
+    -- The path may not exist yet — a port pin for a directory about to be
+    -- created, a page not yet written, a sub-project referenced before
+    -- checkout. Walk up to the deepest ancestor that *does* exist and
+    -- re-append the rest.
+    --
+    -- Resolving only the immediate parent is not enough: with `/tmp` a symlink,
+    -- `/tmp/repo` would canonicalise to `/private/tmp/repo` while
+    -- `/tmp/repo/app` stayed as written, and the two would no longer compare as
+    -- parent and child. Every containment check downstream depends on this
+    -- being consistent at any depth.
+    local segments = {}
+    local current = normalized
+    while true do
+      local parent = vim.fs.dirname(current)
+      if not parent or parent == current then
+        break
+      end
+      table.insert(segments, 1, vim.fs.basename(current))
       local parent_real = M.uv.fs_realpath(parent)
       if parent_real then
-        resolved = strip_trailing(vim.fs.normalize(parent_real)) .. "/" .. vim.fs.basename(normalized)
+        resolved = strip_trailing(vim.fs.normalize(parent_real)) .. "/" .. table.concat(segments, "/")
+        break
       end
+      current = parent
     end
   end
 

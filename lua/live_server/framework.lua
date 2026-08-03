@@ -29,6 +29,8 @@ local M = {}
 ---@field package_manager live_server.PackageManager
 ---@field recognised boolean true when a known framework was identified, false
 ---       when we only found a script we do not understand
+---@field realtime boolean true for socket/WebSocket servers, which listen on a
+---       port but have no page worth opening
 
 ---@class live_server.PackageManager
 ---@field name string
@@ -173,6 +175,21 @@ local SIGNATURES = {
     -- No convention beyond `process.env.PORT`.
     port_style = "env",
     live_reload = false,
+    ready_timeout = 45000,
+  },
+  {
+    -- Listed after Express on purpose: a server that is both an HTTP API and a
+    -- socket host is an HTTP server with sockets attached, and should be
+    -- described as one. This entry is for the socket-only process.
+    deps = { "socket.io", "ws", "uWebSockets.js", "sockjs", "socketcluster-server" },
+    name = "socket_server",
+    display = "Socket server",
+    script_preference = { "dev", "start", "serve" },
+    port_style = "env",
+    live_reload = false,
+    -- There is no page here. Opening a browser at a socket endpoint shows a
+    -- 404 or a protocol error, never anything useful.
+    realtime = true,
     ready_timeout = 45000,
   },
 }
@@ -338,6 +355,7 @@ function M.detect(root)
       package_manager = M.package_manager(root),
       package_json = path,
       recognised = false,
+      realtime = false,
     }
   end
 
@@ -355,6 +373,7 @@ function M.detect(root)
     package_manager = M.package_manager(root),
     package_json = path,
     recognised = true,
+    realtime = signature.realtime == true,
   }
 end
 

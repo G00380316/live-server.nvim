@@ -85,7 +85,7 @@ load and configure it on first use.
 
 Subcommands ~
 
-:LiveServer start [backend] [port] [dir] [port=N] [dir=PATH] [expose] [no-open]
+:LiveServer start [all|backend] [port] [dir] [port=N] [dir=PATH] [expose] [no-open]
         Start a server for the current project. Arguments may be given in any
         order; a number is a port, a known backend name is a backend, and
         anything else is a directory. >
@@ -94,6 +94,10 @@ Subcommands ~
             :LiveServer start browser_sync port=4000 dir=docs
             :LiveServer start expose
 <
+        `all` starts every app in the repository — a frontend, an API and a
+        socket server in one keystroke, with a single consent prompt covering
+        all of them. See |live-server-multiple|.
+
 :LiveServer stop [all]
         Stop the current project's server, or every server with `all`.
 
@@ -174,6 +178,7 @@ Keys (all configurable through `ui.keys`) ~
     l           show its process output
     y           copy the URL to the clipboard
     a           start a new server here
+    A           start every app in this repository
     d           stop it and remove the entry
     e           toggle exposing it on the local network
     f           show the ssh port-forwarding command
@@ -466,12 +471,40 @@ When several apps are found, in order:
 `:LiveServer apps` lists what was found; `:LiveServer apps forget` clears the
 remembered choice.
 
-Two apps, two servers ~
+                                                        *live-server-multiple*
+Several services, one repository ~
 
 Servers are identified by their working directory, not by the repository, so
-`frontend` and `api` run at the same time on their own ports and with their
-own port pins. The manager groups them under the repository and shows the
-sub-directory beside each one.
+every service runs at the same time on its own port and with its own port pin.
+The manager groups them under the repository and shows the sub-directory beside
+each one.
+
+A repository like this is common: >
+
+    my-project/
+      web/                     Next.js frontend
+      server/                  Express API
+      server/socket/           socket.io server, inside the API directory
+      ai_server/               a second Express API
+      ai_server/socket/        its socket server
+<
+All five are found — nesting one inside another is fine, the walk continues
+into a directory that is itself servable — and: >
+
+    :LiveServer start all
+<
+starts every one of them, each on its own port, asking for consent **once** for
+the whole set rather than once per service. The batch prompt lists every
+command in full, and each answer is still recorded against that command alone,
+so editing any one script asks again.
+
+Socket servers ~
+
+A `socket.io`, `ws` or similar process is recognised as a "Socket server". It
+listens on a port like anything else, so readiness and port handling work
+normally, but no browser is opened at it: there is no page there, only a
+protocol endpoint. A server that has *both* Express and socket.io is an HTTP
+server with sockets attached and is treated as one.
 
 Turning it off ~
 >lua
@@ -669,6 +702,9 @@ Notes ~
 
     ls.setup(opts)                    -- optional
     ls.start(opts, callback)          -- opts: adapter, port, dir, path, expose, open
+    ls.start_all(opts, callback)      -- every app in the repository
+    ls.apps()                         -- what discovery found
+    ls.workdir()                      -- directory a server would run in
     ls.stop(server?)
     ls.stop_all()
     ls.toggle(opts, callback)
@@ -799,6 +835,10 @@ It says there is nothing to serve, but my app is right there ~
     The app is probably below the repository root and discovery is off or too
     shallow. `:checkhealth live_server` lists what it found; raise
     `discover.depth` or pass the directory: `:LiveServer start dir=frontend`.
+
+I want all of my services running, not one ~
+    `:LiveServer start all`, or `A` in the manager. Ports are allocated per
+    service and can each be pinned.
 
 It keeps asking which app to start ~
     Answer once with `discover.remember = true` (the default), or set

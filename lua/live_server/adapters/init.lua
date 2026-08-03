@@ -42,7 +42,10 @@ local M = {}
 ---@field describe_project? fun(project: live_server.Project): string? label for this project
 ---@field requires_consent? fun(project: live_server.Project): table? gate before running
 ---@field ready_timeout? fun(project: live_server.Project): integer? override the readiness budget
----@field url_pattern? string Lua pattern capturing the port the process reports
+---@field live_reload_for? fun(project: live_server.Project): boolean per-project live reload
+---@field serves_pages? fun(project: live_server.Project): boolean false for socket-only servers
+---@field url_pattern? string Lua pattern capturing a reported URL's port (trusted)
+---@field port_pattern? string weaker pattern for a bare port number (corroborated first)
 ---@field version_args? string[] arguments that print a version
 
 ---@type table<string, live_server.AdapterSpec>

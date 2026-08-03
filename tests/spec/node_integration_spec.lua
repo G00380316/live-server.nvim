@@ -385,3 +385,102 @@ t.describe("nested project layouts", function()
   config.did_setup = false
   config.setup({})
 end)
+
+t.describe("starting every service at once", function()
+  local RESPECTS = [[
+const http = require("http");
+http.createServer((_, res) => { res.writeHead(200); res.end("ok"); })
+  .listen(Number(process.env.PORT), "127.0.0.1", () => console.log("ready on http://127.0.0.1:" + process.env.PORT));
+]]
+
+  ---@return string root
+  local function services_repo()
+    local root = util.normalize(vim.fn.tempname())
+    vim.fn.mkdir(root .. "/.git", "p")
+    util.write_file(root .. "/.git/HEAD", "ref: refs/heads/main")
+    for dir, deps in pairs({
+      ["web"] = '"ws":"8"',
+      ["server"] = '"express":"4"',
+      ["server/socket"] = '"socket.io":"4"',
+      ["ai_server"] = '"express":"4"',
+    }) do
+      vim.fn.mkdir(root .. "/" .. dir, "p")
+      util.write_file(root .. "/" .. dir .. "/app.js", RESPECTS)
+      util.write_file(
+        root .. "/" .. dir .. "/package.json",
+        ('{"name":"%s","private":true,"dependencies":{%s},"scripts":{"start":"node app.js"}}'):format(
+          dir:gsub("/", "-"),
+          deps
+        )
+      )
+    end
+    require("live_server.discover").invalidate()
+    framework.invalidate()
+    project_mod.invalidate()
+    return root
+  end
+
+  t.it("starts all of them, each on its own port", function()
+    config.did_setup = false
+    config.setup({
+      browser = { auto_open = false },
+      detect_orphans = false,
+      restart = { on_crash = false },
+      project = { trust = "allow" },
+      port = { strategy = "scan", range = { 6200, 6250 }, remember = false },
+      ready = { timeout = 30000 },
+    })
+
+    local root = services_repo()
+    local result = nil
+    manager.start_all({ dir = root }, function(started, failures)
+      result = { started = started, failures = failures }
+    end)
+    t.truthy(
+      vim.wait(120000, function()
+        return result ~= nil
+      end, 200),
+      "start_all never finished"
+    )
+    t.eq(#result.failures, 0, "failures: " .. vim.inspect(result.failures))
+    t.eq(#result.started, 4)
+
+    local ports, workdirs = {}, {}
+    for _, server in ipairs(result.started) do
+      t.falsy(ports[server.port], "two services were given the same port")
+      t.falsy(workdirs[server.project.workdir], "two servers share a working directory")
+      ports[server.port] = true
+      workdirs[server.project.workdir] = true
+      t.eq(server.status, "running")
+      t.eq(server.project.root, root, "all four belong to one repository")
+    end
+
+    t.eq(#manager.for_project(root, { active_only = true }), 4)
+
+    manager.stop_all()
+    vim.wait(15000, function()
+      return manager.count_active() == 0
+    end, 100)
+    manager.prune()
+  end)
+
+  t.it("knows a socket server has no page to open", function()
+    config.did_setup = false
+    config.setup({ project = { trust = "allow" } })
+    local root = services_repo()
+    local base = project_mod.get(root)
+    local adapters_mod = require("live_server.adapters")
+
+    local socket_project = project_mod.derive(base, root .. "/server/socket")
+    t.falsy(adapters_mod.get("node").serves_pages(socket_project), "a socket endpoint is not a page")
+
+    local http_project = project_mod.derive(base, root .. "/server")
+    t.truthy(adapters_mod.get("node").serves_pages(http_project))
+
+    config.did_setup = false
+    config.setup({})
+  end)
+
+  config.did_setup = false
+  config.setup({})
+end)

@@ -13,9 +13,12 @@ read_globals = {
   "unpack",
 }
 
--- Neovim's Lua is not concerned with 120-column purity, but runaway lines hurt
--- review diffs more than they help.
-max_line_length = 120
+-- Line width is stylua's job (see stylua.toml). Enforcing it here as well means
+-- two tools policing one rule with different definitions of "width" — luacheck
+-- counts bytes, stylua counts columns — so a line containing an em dash can
+-- satisfy the formatter and still fail the linter. Formatting belongs to the
+-- formatter; luacheck is here for correctness.
+max_line_length = false
 
 exclude_files = {
   ".test-home/",

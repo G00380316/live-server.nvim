@@ -526,7 +526,16 @@ function M.setup(opts)
   -- Lists are replaced wholesale rather than merged: a user who sets
   -- `watch.ignore` means "these", not "these plus my defaults".
   M.options = vim.tbl_deep_extend("force", vim.deepcopy(defaults), opts)
-  for _, path in ipairs({ "adapter_priority", "root.patterns", "root.auto", "port.range", "project.files", "watch.extensions", "watch.ignore" }) do
+  local list_options = {
+    "adapter_priority",
+    "root.patterns",
+    "root.auto",
+    "port.range",
+    "project.files",
+    "watch.extensions",
+    "watch.ignore",
+  }
+  for _, path in ipairs(list_options) do
     local override = get_path(opts, path)
     if override ~= nil then
       set_path(M.options, path, vim.deepcopy(override))

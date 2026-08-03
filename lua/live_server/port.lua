@@ -63,14 +63,12 @@ end
 ---@param adapter string
 ---@param port integer
 function M.pin(root, adapter, port)
-  db()
-    :set(pin_key(root, adapter), {
-      port = port,
-      root = util.normalize(root),
-      adapter = adapter,
-      at = os.time(),
-    })
-    :save()
+  db():set(pin_key(root, adapter), {
+    port = port,
+    root = util.normalize(root),
+    adapter = adapter,
+    at = os.time(),
+  }):save()
   log.info("pinned port", { root = root, adapter = adapter, port = port })
 end
 
@@ -205,8 +203,7 @@ function M.resolve(opts)
 
   local found = net.find_free(host, preferred, range, cfg.port.max_attempts, reserved)
   if not found then
-    return nil,
-      ("no free port between %d and %d (tried %d)"):format(range[1], range[2], cfg.port.max_attempts)
+    return nil, ("no free port between %d and %d (tried %d)"):format(range[1], range[2], cfg.port.max_attempts)
   end
 
   reserved[found] = true

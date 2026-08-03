@@ -288,7 +288,12 @@ end
 function M.port_owner(port, callback)
   local cmd
   if util.is_windows then
-    cmd = { "powershell", "-NoProfile", "-Command", ("Get-NetTCPConnection -LocalPort %d -State Listen | Select-Object -First 1 -ExpandProperty OwningProcess | ForEach-Object { (Get-Process -Id $_).ProcessName }"):format(port) }
+    local script = table.concat({
+      ("Get-NetTCPConnection -LocalPort %d -State Listen"):format(port),
+      "Select-Object -First 1 -ExpandProperty OwningProcess",
+      "ForEach-Object { (Get-Process -Id $_).ProcessName }",
+    }, " | ")
+    cmd = { "powershell", "-NoProfile", "-Command", script }
   elseif util.executable("lsof") then
     cmd = { "lsof", "-nP", "-sTCP:LISTEN", "-i", ("TCP:%d"):format(port), "-F", "cn" }
   elseif util.executable("ss") then

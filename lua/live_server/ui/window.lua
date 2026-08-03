@@ -30,8 +30,17 @@ local function dimension(fraction, total, min, max)
   return math.floor(util.clamp(value, min, math.min(max, total)))
 end
 
+---@class live_server.ui.WindowOpts
+---@field title string shown in the border
+---@field width? number fraction of the editor when <= 1, else absolute cells
+---@field height? number same units as `width`
+---@field filetype? string buffer filetype, for user autocommands
+---@field footer? string border footer (Neovim 0.10+, bordered floats only)
+---@field enter? boolean focus the window on open, default true
+---@field force_split? boolean never use a float
+
 --- Open a panel.
----@param opts { title: string, width?: number, height?: number, filetype?: string, footer?: string, enter?: boolean, force_split?: boolean }
+---@param opts live_server.ui.WindowOpts
 ---@return live_server.ui.Window
 function M.open(opts)
   local cfg = require("live_server.config").get()

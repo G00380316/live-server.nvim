@@ -71,7 +71,9 @@ local function render()
     end
   end
 
-  window:set_title(("%s — %s :%d (%s)"):format(server.project.name, server.adapter.display, server.port, server.status))
+  window:set_title(
+    ("%s — %s :%d (%s)"):format(server.project.name, server.adapter.display, server.port, server.status)
+  )
 
   if state.follow and window:is_open() then
     pcall(vim.api.nvim_win_set_cursor, window.win, { #lines, 0 })

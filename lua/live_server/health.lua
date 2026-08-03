@@ -66,26 +66,39 @@ local function check_adapters(callback)
   end
 
   local any_available = false
+
+  -- Both branches finish through here. Checking `any_available` inside the
+  -- "is installed" branch would make the most important message in the whole
+  -- health check — you have no dev server — unreachable for the one user who
+  -- needs it.
+  local function finish()
+    pending = pending - 1
+    if pending > 0 then
+      return
+    end
+    if not any_available then
+      error_("no dev server is installed — `npm install -g live-server`, or use python3")
+    end
+    callback()
+  end
+
   for _, name in ipairs(names) do
     local spec = adapters.get(name)
     if adapters.available(name) then
       any_available = true
       adapters.version(name, function(version)
-        ok(("%s %s%s"):format(spec.display, version or "(version unknown)", spec.live_reload and "" or "  [no live reload]"))
-        pending = pending - 1
-        if pending == 0 then
-          if not any_available then
-            error_("no dev server is installed")
-          end
-          callback()
-        end
+        ok(
+          ("%s %s%s"):format(
+            spec.display,
+            version or "(version unknown)",
+            spec.live_reload and "" or "  [no live reload]"
+          )
+        )
+        finish()
       end)
     else
       info(("%s is not installed — %s"):format(spec.display, spec.install))
-      pending = pending - 1
-      if pending == 0 then
-        callback()
-      end
+      finish()
     end
   end
 end
@@ -150,7 +163,8 @@ local function check_environment()
 
   local browser_cfg = require("live_server.config").get().browser
   if browser_cfg.cmd then
-    info("browser command: " .. (type(browser_cfg.cmd) == "table" and table.concat(browser_cfg.cmd, " ") or browser_cfg.cmd))
+    local shown = type(browser_cfg.cmd) == "table" and table.concat(browser_cfg.cmd, " ") or browser_cfg.cmd
+    info("browser command: " .. shown)
   elseif vim.ui.open then
     ok("browser opening: vim.ui.open")
   else
@@ -205,7 +219,12 @@ function M.check()
     require("live_server.manager").find_orphans(function(orphans)
       if #orphans > 0 then
         start("Orphaned processes")
-        warn(("%d server process%s from a previous session are still running"):format(#orphans, #orphans == 1 and "" or "es"))
+        warn(
+          ("%d server process%s from a previous session are still running"):format(
+            #orphans,
+            #orphans == 1 and "" or "es"
+          )
+        )
         for _, record in ipairs(orphans) do
           warn(("  pid %d on port %s (%s)"):format(record.pid, tostring(record.port), record.adapter or "?"))
         end

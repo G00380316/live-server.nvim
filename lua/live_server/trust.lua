@@ -52,13 +52,11 @@ end
 ---@param content string
 ---@param decision "allow"|"deny"
 function M.record(path, content, decision)
-  db()
-    :set(record_key(path, content), {
-      path = util.normalize(path),
-      decision = decision,
-      at = os.time(),
-    })
-    :save()
+  db():set(record_key(path, content), {
+    path = util.normalize(path),
+    decision = decision,
+    at = os.time(),
+  }):save()
   log.info("recorded trust decision", { path = path, decision = decision })
 end
 

@@ -62,11 +62,7 @@ end
 function M.eq(actual, expected, message)
   if not vim.deep_equal(actual, expected) then
     fail(
-      ("%sexpected %s, got %s"):format(
-        message and (message .. ": ") or "",
-        vim.inspect(expected),
-        vim.inspect(actual)
-      )
+      ("%sexpected %s, got %s"):format(message and (message .. ": ") or "", vim.inspect(expected), vim.inspect(actual))
     )
   end
 end
@@ -136,9 +132,7 @@ function M.report()
     io.write("FAILED  " .. failure.name .. "\n")
     io.write("        " .. failure.err:gsub("\n", "\n        ") .. "\n\n")
   end
-  io.write(
-    ("%d passed, %d failed, %d skipped\n"):format(M.passed, M.failed, M.skipped)
-  )
+  io.write(("%d passed, %d failed, %d skipped\n"):format(M.passed, M.failed, M.skipped))
   return M.failed == 0 and 0 or 1
 end
 

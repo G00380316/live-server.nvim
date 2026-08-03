@@ -106,7 +106,12 @@ end
 -- Subcommands
 --------------------------------------------------------------------------------
 
----@type table<string, { run: fun(args: live_server.CommandArgs), desc: string, complete?: fun(lead: string): string[] }>
+---@class live_server.Subcommand
+---@field run fun(args: live_server.CommandArgs)
+---@field desc string shown in completion and error messages
+---@field complete? fun(lead: string): string[] candidates for the next argument
+
+---@type table<string, live_server.Subcommand>
 local subcommands = {}
 
 subcommands.start = {
@@ -284,7 +289,10 @@ subcommands.unpin = {
 
     if adapter then
       local removed = port_mod.unpin(project.root, adapter)
-      log.notify(removed and ("Unpinned %s for %s."):format(adapter, project.name) or "No pin for that server.", removed and "info" or "warn")
+      log.notify(
+        removed and ("Unpinned %s for %s."):format(adapter, project.name) or "No pin for that server.",
+        removed and "info" or "warn"
+      )
       return
     end
 
@@ -367,16 +375,17 @@ subcommands.reap = {
           vim.fn.fnamemodify(record.root or "?", ":~")
         )
       end
-      require("live_server.ui.prompt").confirm(
-        ("Stop %d leftover process%s?\n%s"):format(#orphans, #orphans == 1 and "" or "es", table.concat(description, "\n")),
-        {},
-        function(confirmed)
-          if confirmed then
-            local killed = manager.reap(orphans)
-            log.notify(("Stopped %d process%s."):format(killed, killed == 1 and "" or "es"), "info")
-          end
-        end
+      local question = ("Stop %d leftover process%s?\n%s"):format(
+        #orphans,
+        #orphans == 1 and "" or "es",
+        table.concat(description, "\n")
       )
+      require("live_server.ui.prompt").confirm(question, {}, function(confirmed)
+        if confirmed then
+          local killed = manager.reap(orphans)
+          log.notify(("Stopped %d process%s."):format(killed, killed == 1 and "" or "es"), "info")
+        end
+      end)
     end)
   end,
 }

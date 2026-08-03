@@ -89,12 +89,14 @@ local function load_user_adapters()
         copy.build = function(ctx)
           local argv = {}
           for _, arg in ipairs(spec.command) do
-            argv[#argv + 1] = (arg:gsub("{(%w+)}", {
-              port = tostring(ctx.port),
-              host = ctx.host,
-              dir = ctx.serve_dir,
-              root = ctx.project.root,
-            }))
+            argv[#argv + 1] = (
+              arg:gsub("{(%w+)}", {
+                port = tostring(ctx.port),
+                host = ctx.host,
+                dir = ctx.serve_dir,
+                root = ctx.project.root,
+              })
+            )
           end
           return argv
         end

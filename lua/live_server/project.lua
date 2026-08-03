@@ -84,8 +84,7 @@ end
 ---@return string
 local function resolve_serve_dir(root, override)
   if override and override ~= "" then
-    local candidate = util.is_absolute(override) and util.normalize(override)
-      or util.normalize(root .. "/" .. override)
+    local candidate = util.is_absolute(override) and util.normalize(override) or util.normalize(root .. "/" .. override)
     if util.is_dir(candidate) then
       return candidate
     end

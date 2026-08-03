@@ -215,7 +215,12 @@ t.describe("port.resolve", function()
 
   t.it("rejects an invalid explicit port", function()
     with_config({}, function()
-      local result, err = port_mod.resolve({ root = root, adapter = "live_server", host = "127.0.0.1", requested = "80" })
+      local result, err = port_mod.resolve({
+        root = root,
+        adapter = "live_server",
+        host = "127.0.0.1",
+        requested = "80",
+      })
       t.eq(result, nil)
       t.contains(err, "privileged")
     end)
@@ -272,7 +277,8 @@ t.describe("port.resolve", function()
     socket:listen(1, function() end)
     local busy = socket:getsockname().port
 
-    with_config({ port = { strategy = "pin", range = { busy, busy + 20 }, defaults = { live_server = busy } } }, function()
+    local busy_config = { port = { strategy = "pin", range = { busy, busy + 20 }, defaults = { live_server = busy } } }
+    with_config(busy_config, function()
       local result = port_mod.resolve({ root = root, adapter = "live_server", host = "127.0.0.1" })
       t.truthy(result)
       t.truthy(result.fallback)

@@ -259,10 +259,7 @@ function M.start(opts, callback)
 
   local existing = M.find_active(project.root, adapter.name)
   if existing then
-    log.notify(
-      ("%s is already running for %s at %s"):format(adapter.display, project.name, existing:url()),
-      "warn"
-    )
+    log.notify(("%s is already running for %s at %s"):format(adapter.display, project.name, existing:url()), "warn")
     return callback(existing, nil)
   end
 

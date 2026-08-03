@@ -61,9 +61,12 @@ t.describe("integration (" .. backend .. ")", function()
     manager.start({ dir = root }, function(server, err)
       started, failure = server, err
     end)
-    t.truthy(vim.wait(25000, function()
-      return started ~= nil or failure ~= nil
-    end, 50), "start callback never fired")
+    t.truthy(
+      vim.wait(25000, function()
+        return started ~= nil or failure ~= nil
+      end, 50),
+      "start callback never fired"
+    )
     t.truthy(started, "server failed to start: " .. tostring(failure))
     t.eq(started.status, "running")
     t.truthy(net.is_listening("127.0.0.1", started.port, 1000), "port is not accepting connections")
@@ -119,9 +122,12 @@ t.describe("integration (" .. backend .. ")", function()
     manager.start({ dir = root }, function(server)
       started = server
     end)
-    t.truthy(vim.wait(25000, function()
-      return started ~= nil
-    end, 50), "server never started around the blocked port")
+    t.truthy(
+      vim.wait(25000, function()
+        return started ~= nil
+      end, 50),
+      "server never started around the blocked port"
+    )
     t.neq(started.port, 5700, "the occupied port must be skipped")
 
     manager.stop(started)
@@ -191,9 +197,12 @@ t.describe("integration (" .. backend .. ")", function()
     manager.change_port(started, new_port, function(ok)
       moved = ok
     end)
-    t.truthy(vim.wait(25000, function()
-      return moved ~= nil
-    end, 50), "change_port never completed")
+    t.truthy(
+      vim.wait(25000, function()
+        return moved ~= nil
+      end, 50),
+      "change_port never completed"
+    )
     t.truthy(moved, "change_port failed")
     t.eq(started.port, new_port)
     t.truthy(net.is_listening("127.0.0.1", new_port, 1000), "the new port is not answering")
@@ -243,9 +252,19 @@ t.describe("integration (" .. backend .. ")", function()
       failure = err or "failed"
     end)
 
-    t.truthy(vim.wait(8000, function()
-      return crashed
-    end, 50), "a process that exits non-zero must be reported as crashed")
+    t.truthy(
+      vim.wait(8000, function()
+        return crashed
+      end, 50),
+      "a process that exits non-zero must be reported as crashed"
+    )
+
+    t.truthy(
+      vim.wait(3000, function()
+        return failure ~= nil
+      end, 50),
+      "the start callback must report the failure, not hang"
+    )
 
     local server = manager.servers()[#manager.servers()]
     t.eq(server.status, "crashed")
@@ -269,9 +288,12 @@ t.describe("integration (" .. backend .. ")", function()
     manager.start({ dir = root, port = 80 }, function(_, err)
       failure = err
     end)
-    t.truthy(vim.wait(3000, function()
-      return failure ~= nil
-    end, 50), "no error reported for a privileged port")
+    t.truthy(
+      vim.wait(3000, function()
+        return failure ~= nil
+      end, 50),
+      "no error reported for a privileged port"
+    )
     t.contains(failure, "privileged")
   end)
 

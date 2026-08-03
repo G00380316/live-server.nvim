@@ -240,7 +240,8 @@ local function build_rows(servers, width)
         local url_marks = {}
         local indent = "     "
         local url = remote.is_remote() and remote.local_url(server) or server:url()
-        local url_line = append(indent, url_marks, util.truncate(url, math.max(20, width - #indent - 2)), "LiveServerUrl")
+        local url_width = math.max(20, width - #indent - 2)
+        local url_line = append(indent, url_marks, util.truncate(url, url_width), "LiveServerUrl")
         rows[#rows + 1] = row(url_line, "url", { server = server, marks = url_marks })
       end
     end
@@ -491,7 +492,10 @@ local function action_yank()
   end
   local url = remote.is_remote() and remote.local_url(server) or server:url()
   local copied, method = remote.copy(url)
-  log.notify(copied and ("Copied %s (%s)"):format(url, method) or ("Could not copy; the URL is %s"):format(url), copied and "info" or "warn")
+  log.notify(
+    copied and ("Copied %s (%s)"):format(url, method) or ("Could not copy; the URL is %s"):format(url),
+    copied and "info" or "warn"
+  )
 end
 
 local function action_change_port()

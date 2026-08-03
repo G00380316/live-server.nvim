@@ -51,8 +51,20 @@ Server.__index = Server
 ---@type integer
 local next_id = 0
 
+---@class live_server.ServerOpts
+---@field adapter live_server.AdapterSpec
+---@field project live_server.Project
+---@field host string
+---@field port integer
+---@field serve_dir? string defaults to the project's detected serve directory
+---@field open_path? string page to open once ready
+---@field entry_file? string SPA fallback document
+---@field extra? string[] additional CLI arguments
+---@field env? table<string, string> extra environment variables (needs trust)
+---@field command? string[] replaces the adapter's argv entirely (needs trust)
+
 --- Create a server object. Nothing is spawned until `start()`.
----@param opts { adapter: live_server.AdapterSpec, project: live_server.Project, host: string, port: integer, serve_dir?: string, open_path?: string, entry_file?: string, extra?: string[], env?: table<string,string>, command?: string[] }
+---@param opts live_server.ServerOpts
 ---@return live_server.Server
 function M.new(opts)
   next_id = next_id + 1
@@ -207,6 +219,42 @@ function Server:set_status(status, evt)
   event.emit(evt or "changed", { server = self })
 end
 
+--- Deliver the result of a `start()` exactly once.
+---
+--- A start can finish three ways — the port answers, the readiness probe times
+--- out, or the process dies first — and every one of them has to reach the
+--- caller. Losing the third case leaves `require("live_server").start(o, cb)`
+--- waiting for a callback that will never come.
+---@param ok boolean
+---@param err string?
+function Server:_settle_start(ok, err)
+  self:_take_start_callback()(ok, err)
+end
+
+--- Detach the pending start callback and return an invoker for it.
+---
+--- Detaching *before* any event is emitted is the whole point: a `stopped`
+--- handler may synchronously begin a new run (that is exactly what
+--- `restart` and `change_port` do), and that new run registers its own
+--- callback. Reading `self._start_callback` afterwards would settle the new
+--- run with the old run's outcome.
+---@return fun(ok: boolean, err: string?)
+function Server:_take_start_callback()
+  local pending = self._start_callback
+  self._start_callback = nil
+  return function(ok, err)
+    if not pending then
+      return
+    end
+    local fn = pending
+    pending = nil
+    local safe, hook_err = pcall(fn, ok, err)
+    if not safe then
+      log.error("start callback failed", { err = tostring(hook_err) })
+    end
+  end
+end
+
 --- Spawn the process.
 ---@param callback? fun(ok: boolean, err: string?)
 function Server:start(callback)
@@ -232,6 +280,9 @@ function Server:start(callback)
   self.ready_at = nil
   self.started_at = util.now()
   self.status = "starting"
+  -- Registered before the spawn: `on_exit` can fire before `jobstart` returns
+  -- for a process that dies instantly.
+  self._start_callback = callback
 
   local env = vim.tbl_extend("force", {
     -- Keep process output parseable, and make sure no adapter decides to open
@@ -267,14 +318,13 @@ function Server:start(callback)
   })
 
   if not spawned or type(job) ~= "number" or job <= 0 then
-    local reason = job == -1 and ("%s is not executable"):format(argv[1])
-      or ("failed to spawn %s"):format(argv[1])
+    local reason = job == -1 and ("%s is not executable"):format(argv[1]) or ("failed to spawn %s"):format(argv[1])
     self.status = "crashed"
     self:append_log("system", reason)
     port_mod.release(self.port)
     log.error(reason, { argv = argv })
     event.emit("crashed", { server = self, reason = reason })
-    return callback(false, reason)
+    return self:_settle_start(false, reason)
   end
 
   self.job = job
@@ -303,7 +353,7 @@ function Server:start(callback)
       self.status = "running"
       log.info("server ready", { url = self:url(), pid = self.pid })
       event.emit("ready", { server = self })
-      callback(true, nil)
+      self:_settle_start(true, nil)
     else
       self.status = "unhealthy"
       local detail = self:last_error()
@@ -315,7 +365,7 @@ function Server:start(callback)
       self:append_log("system", message)
       log.warn(message, { detail = detail })
       event.emit("changed", { server = self })
-      callback(false, detail and (message .. ": " .. detail) or message)
+      self:_settle_start(false, detail and (message .. ": " .. detail) or message)
     end
   end)
 end
@@ -326,6 +376,10 @@ function Server:_on_exit(code)
   self.stopped_at = util.now()
   self.job = nil
   self.pid = nil
+
+  -- Detach before emitting anything: handlers of the events below may start a
+  -- fresh run on this same object.
+  local settle_start = self:_take_start_callback()
 
   if self._cancel_ready then
     self._cancel_ready()
@@ -347,6 +401,9 @@ function Server:_on_exit(code)
     self.status = "stopped"
     log.info("server stopped", { id = self.id, code = code })
     event.emit("stopped", { server = self, code = code })
+    -- A stop that lands before the port ever answered still has to answer the
+    -- caller waiting on `start()`.
+    settle_start(false, ("%s exited before it was ready"):format(self.adapter.display))
     self:_notify_stop_hook()
     return
   end
@@ -355,6 +412,9 @@ function Server:_on_exit(code)
   local detail = self:last_error()
   log.warn("server exited unexpectedly", { id = self.id, code = code, detail = detail })
   event.emit("crashed", { server = self, code = code, reason = detail })
+
+  local summary = ("%s exited with code %d"):format(self.adapter.display, code)
+  settle_start(false, detail and (summary .. ": " .. detail) or summary)
   self:_notify_stop_hook()
 
   local cfg = require("live_server.config").get()
@@ -366,10 +426,12 @@ function Server:_on_exit(code)
       if self.status ~= "crashed" then
         return -- the user already intervened
       end
-      log.notify(
-        ("%s crashed; restarting (attempt %d/%d)"):format(self.adapter.display, self.restarts, cfg.restart.max_attempts),
-        "warn"
+      local message = ("%s crashed; restarting (attempt %d/%d)"):format(
+        self.adapter.display,
+        self.restarts,
+        cfg.restart.max_attempts
       )
+      log.notify(message, "warn")
       self:start()
     end, delay)
   elseif cfg.restart.on_crash and self.restarts >= cfg.restart.max_attempts then

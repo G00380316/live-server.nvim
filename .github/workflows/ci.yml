@@ -41,14 +41,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - uses: leafo/gh-actions-lua@v10
+      # Uses luacheck's own action rather than installing through luarocks.
+      # `luarocks install` runs on Lua 5.1, and the luarocks.org manifest has
+      # outgrown 5.1's 65536-constants-per-chunk limit, so it now fails to
+      # parse its own index before it can resolve anything.
+      - name: Luacheck
+        uses: lunarmodules/luacheck@v1
         with:
-          luaVersion: "luajit-openresty"
-      - uses: leafo/gh-actions-luarocks@v4
-      - run: luarocks install luacheck
-      - run: luacheck lua plugin tests
+          args: lua plugin tests
 
-      - uses: JohnnyMorganz/stylua-action@v4
+      - name: StyLua
+        uses: JohnnyMorganz/stylua-action@v4
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           version: latest

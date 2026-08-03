@@ -24,6 +24,11 @@ local M = {}
 ---@field delay integer reload debounce in milliseconds
 ---@field extra string[] user-supplied extra arguments
 
+---@class live_server.AdapterResult
+---@field argv string[] command to run
+---@field env? table<string, string> extra environment variables
+---@field cwd? string working directory, defaults to the project root
+
 ---@class live_server.AdapterSpec
 ---@field name string stable identifier used in commands and pins
 ---@field display string human label
@@ -31,15 +36,20 @@ local M = {}
 ---@field install string how to install it
 ---@field live_reload boolean does it push changes to the browser
 ---@field supports table<string, boolean> optional capabilities
----@field build fun(ctx: live_server.SpawnContext): string[] argv
+---@field build fun(ctx: live_server.SpawnContext): string[]|live_server.AdapterResult
 ---@field detect? fun(): boolean override for availability
+---@field detect_project? fun(project: live_server.Project): boolean, string? per-project availability
+---@field describe_project? fun(project: live_server.Project): string? label for this project
+---@field requires_consent? fun(project: live_server.Project): table? gate before running
+---@field ready_timeout? fun(project: live_server.Project): integer? override the readiness budget
+---@field url_pattern? string Lua pattern capturing the port the process reports
 ---@field version_args? string[] arguments that print a version
 
 ---@type table<string, live_server.AdapterSpec>
 local registry = {}
 
 ---@type string[]
-local builtin_names = { "live_server", "browser_sync", "serve", "python" }
+local builtin_names = { "node", "live_server", "browser_sync", "serve", "python" }
 
 ---@type table<string, boolean>
 local availability_cache = {}
@@ -169,11 +179,51 @@ function M.refresh()
   availability_cache = {}
 end
 
+--- Can this adapter serve *this* project? Distinct from `available`, which
+--- only asks whether the tool is installed: `node` is installed all over the
+--- place but is only the right answer inside an actual Node project.
+---@param name string
+---@param project live_server.Project?
+---@param opts? { explicit?: boolean } the user named this adapter themselves
+---@return boolean
+---@return string? reason
+function M.suits_project(name, project, opts)
+  local spec = M.get(name)
+  if not spec then
+    return false, "unknown adapter"
+  end
+  if not project or not spec.detect_project then
+    return true
+  end
+  local ok, reason = spec.detect_project(project, opts or {})
+  return ok == true, reason
+end
+
+--- Label for this adapter in the context of a project, so a Next.js app reads
+--- as "Next.js" rather than "node".
+---@param name string
+---@param project live_server.Project?
+---@return string
+function M.display_for(name, project)
+  local spec = M.get(name)
+  if not spec then
+    return name
+  end
+  if project and spec.describe_project then
+    local ok, label = pcall(spec.describe_project, project)
+    if ok and type(label) == "string" and label ~= "" then
+      return label
+    end
+  end
+  return spec.display
+end
+
 --- Resolve the adapter to use.
 ---@param name? string explicit request, or `"auto"`/nil
+---@param project? live_server.Project enables per-project selection
 ---@return live_server.AdapterSpec? spec
 ---@return string? err
-function M.resolve(name)
+function M.resolve(name, project)
   local cfg = require("live_server.config").get()
   name = name or cfg.server or "auto"
 
@@ -185,18 +235,24 @@ function M.resolve(name)
     if not M.available(name) then
       return nil, ("%s is not installed. %s"):format(spec.display, spec.install)
     end
+    -- Asked for explicitly: report *why* it does not fit rather than quietly
+    -- substituting something else.
+    local suits, reason = M.suits_project(name, project, { explicit = true })
+    if not suits then
+      return nil, ("%s cannot run here: %s"):format(spec.display, reason or "not applicable to this project")
+    end
     return spec, nil
   end
 
   for _, candidate in ipairs(cfg.adapter_priority) do
-    if M.get(candidate) and M.available(candidate) then
+    if M.get(candidate) and M.available(candidate) and M.suits_project(candidate, project) then
       return M.get(candidate), nil
     end
   end
 
   -- Nothing from the priority list; take anything at all before giving up.
   for _, spec in ipairs(M.all()) do
-    if M.available(spec.name) then
+    if M.available(spec.name) and M.suits_project(spec.name, project) then
       return spec, nil
     end
   end

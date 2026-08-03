@@ -16,9 +16,13 @@ local defaults = {
   ---@type "auto"|"live_server"|"browser_sync"|"serve"|"python"|string
   server = "auto",
 
-  --- Order `server = "auto"` searches for an installed backend.
+  --- Order `server = "auto"` searches for a backend. `node` comes first
+  --- because a project that ships its own dev server almost always means it:
+  --- serving a Next.js source tree as static files produces a broken page.
+  --- It only applies in projects that actually are Node projects, and starting
+  --- it always asks for consent first.
   ---@type string[]
-  adapter_priority = { "live_server", "browser_sync", "serve", "python" },
+  adapter_priority = { "node", "live_server", "browser_sync", "serve", "python" },
 
   --- Extra adapter definitions, keyed by name. See `:help live-server-adapters`.
   ---@type table<string, live_server.AdapterSpec>
@@ -72,6 +76,9 @@ local defaults = {
     --- Preferred starting port per adapter.
     ---@type table<string, integer>
     defaults = {
+      -- 3000 is what Next.js, Nuxt and Express all print in their own docs, so
+      -- a Node project lands where its README says it will.
+      node = 3000,
       live_server = 5500,
       browser_sync = 3000,
       serve = 3000,

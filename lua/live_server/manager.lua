@@ -231,6 +231,37 @@ local function confirm_expose(wanted, needs_prompt, callback)
   end)
 end
 
+--- Ask for consent to run an adapter that executes project-controlled code.
+--- Adapters without a `requires_consent` hook (every static server) pass
+--- straight through.
+---@param adapter live_server.AdapterSpec
+---@param project live_server.Project
+---@param callback fun(consented: boolean)
+local function adapter_consent(adapter, project, callback)
+  if type(adapter.requires_consent) ~= "function" then
+    return callback(true)
+  end
+
+  local ok, request = pcall(adapter.requires_consent, project)
+  if not ok or type(request) ~= "table" or not request.path then
+    return callback(true)
+  end
+
+  local decision = trust.decision(request.path, request.content or "")
+  if decision == "allow" then
+    return callback(true)
+  elseif decision == "deny" then
+    return callback(false)
+  end
+
+  trust.request_command({
+    path = request.path,
+    content = request.content or "",
+    describe = request.describe or {},
+    label = request.label or adapter.display,
+  }, callback)
+end
+
 ---@class live_server.StartOpts
 ---@field adapter? string
 ---@field port? integer|string
@@ -251,7 +282,7 @@ function M.start(opts, callback)
   local project = project_mod.get(opts.dir)
 
   local adapter_name = opts.adapter or project.config.server or cfg.server
-  local adapter, adapter_err = adapters.resolve(adapter_name)
+  local adapter, adapter_err = adapters.resolve(adapter_name, project)
   if not adapter then
     log.notify(adapter_err or "no server available", "error")
     return callback(nil, adapter_err)
@@ -263,6 +294,29 @@ function M.start(opts, callback)
     return callback(existing, nil)
   end
 
+  -- Some adapters run code the repository controls — `npm run dev` is a script
+  -- the project author wrote. That needs consent before it executes, exactly
+  -- like a project file that sets `command`.
+  adapter_consent(adapter, project, function(consented)
+    if not consented then
+      local message = ("Not starting %s. `:LiveServer start live_server` serves the files statically instead."):format(
+        adapters.display_for(adapter.name, project)
+      )
+      log.notify(message, "warn")
+      return callback(nil, "consent declined")
+    end
+
+    M._start_consented(opts, project, adapter, cfg, callback)
+  end)
+end
+
+--- The rest of `start`, once we are allowed to run this adapter.
+---@param opts live_server.StartOpts
+---@param project live_server.Project
+---@param adapter live_server.AdapterSpec
+---@param cfg live_server.Config
+---@param callback fun(server: live_server.Server?, err: string?)
+function M._start_consented(opts, project, adapter, cfg, callback)
   trust.ensure(project, function(granted)
     if not granted and next(project.privileged or {}) then
       log.notify(

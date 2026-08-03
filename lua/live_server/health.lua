@@ -141,6 +141,48 @@ local function check_ports()
   end
 end
 
+local function check_project()
+  start("Current project")
+  local project = require("live_server.project").get()
+  local adapters = require("live_server.adapters")
+
+  info("root: " .. vim.fn.fnamemodify(project.root, ":~"))
+  if project.serve_dir ~= project.root then
+    info("serves: " .. vim.fn.fnamemodify(project.serve_dir, ":~"))
+  end
+
+  local framework = require("live_server.framework").detect(project.root)
+  if framework then
+    ok(("%s detected (%s run %s)"):format(framework.display, framework.package_manager.name, framework.script))
+    info(("  %s = %s"):format(framework.script, framework.script_body))
+    info(("  port arrives as %s"):format(framework.port_style == "flag" and framework.port_flag or "$PORT"))
+    if not framework.recognised then
+      info("  not a recognised framework — `:LiveServer start node` runs it anyway")
+    end
+
+    local request = adapters.get("node") and adapters.get("node").requires_consent(project)
+    if request then
+      local decision = require("live_server.trust").decision(request.path, request.content)
+      if decision == "allow" then
+        ok("  this script is trusted")
+      elseif decision == "deny" then
+        warn("  this script is denied — `:LiveServer trust revoke` clears that")
+      else
+        info("  starting it will ask for consent first")
+      end
+    end
+  else
+    info("no Node dev server detected here")
+  end
+
+  local chosen, err = adapters.resolve(nil, project)
+  if chosen then
+    ok(("`:LiveServer start` here would use %s"):format(adapters.display_for(chosen.name, project)))
+  else
+    warn(err or "no adapter fits this project")
+  end
+end
+
 local function check_environment()
   start("Environment")
   local remote = require("live_server.remote")
@@ -213,6 +255,7 @@ function M.check()
   check_config()
   check_adapters(function()
     check_ports()
+    check_project()
     check_environment()
     check_state()
 

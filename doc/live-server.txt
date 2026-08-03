@@ -18,15 +18,16 @@ CONTENTS                                               *live-server-contents*
   5. Ports and pinning .................... |live-server-ports|
   6. Project configuration ................ |live-server-project-config|
   7. Server backends ...................... |live-server-adapters|
-  8. Working over SSH ..................... |live-server-remote|
-  9. Security model ....................... |live-server-security|
- 10. Configuration ........................ |live-server-config|
- 11. Lua API .............................. |live-server-api|
- 12. Events ............................... |live-server-events|
- 13. Statusline ........................... |live-server-statusline|
- 14. Highlights ........................... |live-server-highlights|
- 15. Troubleshooting ...................... |live-server-troubleshooting|
- 16. Migrating from 0.x ................... |live-server-migration|
+  8. Node and framework servers ........... |live-server-node|
+  9. Working over SSH ..................... |live-server-remote|
+ 10. Security model ....................... |live-server-security|
+ 11. Configuration ........................ |live-server-config|
+ 12. Lua API .............................. |live-server-api|
+ 13. Events ............................... |live-server-events|
+ 14. Statusline ........................... |live-server-statusline|
+ 15. Highlights ........................... |live-server-highlights|
+ 16. Troubleshooting ...................... |live-server-troubleshooting|
+ 17. Migrating from 0.x ................... |live-server-migration|
 
 ==============================================================================
 1. REQUIREMENTS                                    *live-server-requirements*
@@ -38,6 +39,10 @@ whichever you have; you do not have to choose in advance.
     npm install -g browser-sync     syncs scroll and clicks across devices
     npm install -g serve            production-like static hosting
     python3                         zero-install fallback, no live reload
+
+For a Next.js, Vite, Express or similar project you need nothing extra: the
+plugin runs the dev server the repository already defines. See
+|live-server-node|.
 
 `:checkhealth live_server` reports what it found. Nothing else is required —
 no `pgrep`, no `pkill`, no shell.
@@ -273,7 +278,10 @@ cache; restart the server to apply it.
 ==============================================================================
 7. SERVER BACKENDS                                     *live-server-adapters*
 
-    live_server    live-server. CSS injected without a page reload. Default.
+    node           The project's own dev server — Next.js, Vite, Nuxt,
+                   Astro, SvelteKit, Angular, Express and friends. Chosen
+                   automatically inside such a project. See |live-server-node|.
+    live_server    live-server. CSS injected without a page reload.
     browser_sync   browser-sync. Syncs scroll, clicks and form input across
                    every connected device. Its extra web UI port is disabled
                    so one server means exactly one port.
@@ -321,7 +329,94 @@ Arguments are passed to the process directly — never through a shell — so a
 directory named `; rm -rf ~` is just a directory name.
 
 ==============================================================================
-8. WORKING OVER SSH                                      *live-server-remote*
+8. NODE AND FRAMEWORK SERVERS                              *live-server-node*
+
+A static site is served by a tool you install once. A Next.js, Vite or Express
+app is started by the project itself — through its own script, its own package
+manager, and its own idea of how a port is chosen. The `node` backend runs that,
+rather than serving your source tree as files (which would just render a page
+of raw JSX).
+
+    :LiveServer toggle          starts the project's dev server
+    :LiveServer start node      the same, named explicitly
+
+What is detected ~
+
+Read from `package.json` dependencies, most specific first, so a SvelteKit app
+is not mistaken for the Vite it is built on:
+
+    Next.js       Nuxt        Remix       Astro       SvelteKit
+    Angular       Gatsby      Create React App        NestJS
+    Eleventy      Parcel      webpack-dev-server      Vite
+    Express, Fastify, Koa, hapi, restify, polka
+
+Anything else with a `dev`/`develop`/`serve`/`start` script still runs, but you
+have to ask for it by name (see "When it does not apply" below).
+
+The package manager comes from the lockfile — `pnpm-lock.yaml`, `yarn.lock`,
+`bun.lockb`, `package-lock.json` — falling back to the `packageManager` field
+and then to npm.
+
+How the port gets there ~
+
+Frameworks that take a flag get one, with the spelling they actually use
+(Next.js wants `--hostname`, everything else wants `--host`). Vite and SvelteKit
+also get `--strictPort`, so they fail loudly instead of drifting to another port
+and making the URL we report a lie.
+
+Everything else — Express, Create React App, NestJS, an unrecognised script —
+gets `PORT` and `HOST` in the environment, which is the one convention they all
+share. `PORT` is set for flag-driven frameworks too, since their config files
+often read it.
+
+When the process announces a different address than we asked for — the classic
+hard-coded `app.listen(4000)` — the plugin believes the process, adopts that
+port, and says so. A working server is never reported as unreachable because of
+our own bookkeeping.
+
+Cold starts ~
+
+A Next.js or Angular compile can take a minute before the port answers, so
+these backends carry their own readiness budget (up to 120s) instead of the 15s
+that suits a static server. `ready.timeout` raises the floor but never lowers
+these.
+
+Consent ~
+                                                  *live-server-node-consent*
+Starting a static server reads files. Starting a Node dev server *executes
+code the repository wrote*. So the first time, the plugin shows you exactly
+what it is about to run and asks: >
+
+    Run the Next.js dev server defined by this repository?
+
+      script:  dev = next dev
+      via:     pnpm
+
+    Defined in ~/code/shop/package.json. This executes code from the
+    repository.
+<
+The answer is remembered against that script, not against the whole file — a
+dependency bump will not ask again, but changing what `dev` runs will. See
+|live-server-security|.
+
+When it does not apply ~
+
+`server = "auto"` only chooses this backend when it recognises a framework. A
+plain `package.json` whose `start` script is `node build.js` is a build step,
+not a web server, and running it because the plugin guessed would be an
+unpleasant surprise. In that case `auto` falls through to a static server, and
+`:LiveServer start node` runs the script anyway if that is what you meant.
+
+Passing extra arguments ~
+>lua
+    require("live_server").setup({
+      extra_args = { node = { "--turbo" } },
+    })
+<
+or per invocation, through the project file's trusted `args` field.
+
+==============================================================================
+9. WORKING OVER SSH                                      *live-server-remote*
 
 This is where a naive live server plugin quietly fails. The server binds
 loopback *on the remote machine*, `xdg-open` either is missing or opens a
@@ -344,7 +439,7 @@ If you would rather reach the server directly than forward a port, bind it to
 the network with `:LiveServer expose` — read |live-server-security| first.
 
 ==============================================================================
-9. SECURITY MODEL                                      *live-server-security*
+10. SECURITY MODEL                                      *live-server-security*
 
 A dev server serves your working tree, including files you have not committed.
 Two decisions follow from that.
@@ -355,6 +450,13 @@ Servers bind `127.0.0.1`. Exposing one to the network is possible and
 sometimes necessary — testing a layout on a phone — but it is always a
 deliberate, confirmed act (`:LiveServer expose`, or `expose = true` in your
 own configuration as standing consent).
+
+Running project code is always a decision ~
+
+Two things in a repository can execute code: a project file that sets
+`command`, and a `package.json` script. Neither runs without you seeing the
+exact command and agreeing to it (|live-server-node-consent|). Consent is
+recorded against the command itself, so editing it asks again.
 
 Project files cannot execute code by accident ~
 
@@ -382,7 +484,7 @@ Additionally ~
 * State files are written with mode 0600.
 
 ==============================================================================
-10. CONFIGURATION                                        *live-server-config*
+11. CONFIGURATION                                        *live-server-config*
 
                                                        *live_server.setup()*
 Call `require("live_server").setup({...})`, or set `vim.g.live_server` to a
@@ -395,7 +497,7 @@ Defaults: >lua
     require("live_server").setup({
       -- Backend
       server = "auto",
-      adapter_priority = { "live_server", "browser_sync", "serve", "python" },
+      adapter_priority = { "node", "live_server", "browser_sync", "serve", "python" },
       adapters = {},
 
       -- Binding
@@ -413,7 +515,8 @@ Defaults: >lua
         strategy = "pin",          -- "pin" | "scan" | "stable" | "fixed"
         range = { 5500, 5599 },
         defaults = {
-          live_server = 5500, browser_sync = 3000, serve = 3000, python = 8000,
+          node = 3000, live_server = 5500,
+          browser_sync = 3000, serve = 3000, python = 8000,
         },
         remember = true,
         max_attempts = 64,
@@ -484,7 +587,7 @@ Notes ~
   `:LiveServer logs`.
 
 ==============================================================================
-11. LUA API                                                 *live-server-api*
+12. LUA API                                                 *live-server-api*
 
 >lua
     local ls = require("live_server")
@@ -522,7 +625,7 @@ Example — reload a preview when a build finishes: >lua
     end)
 <
 ==============================================================================
-12. EVENTS                                               *live-server-events*
+13. EVENTS                                               *live-server-events*
 
 Every state change fires both a Lua event and a |User| autocommand named
 `LiveServer<Event>`, whose `data` is the server's `:info()` table.
@@ -545,7 +648,7 @@ Example: >lua
     })
 <
 ==============================================================================
-13. STATUSLINE                                       *live-server-statusline*
+14. STATUSLINE                                       *live-server-statusline*
 
 >lua
     -- lualine
@@ -561,7 +664,7 @@ on every redraw costs nothing. Pass `{ global = true }` to count every
 project rather than the current one.
 
 ==============================================================================
-14. HIGHLIGHTS                                       *live-server-highlights*
+15. HIGHLIGHTS                                       *live-server-highlights*
 
 Every group is defined with `default link`, so your colorscheme wins and you
 can override any of them through `ui.highlights`.
@@ -596,7 +699,7 @@ Example: >lua
     })
 <
 ==============================================================================
-15. TROUBLESHOOTING                             *live-server-troubleshooting*
+16. TROUBLESHOOTING                             *live-server-troubleshooting*
 
 Start with `:checkhealth live_server`. It reports the Neovim version, which
 backends are installed and at what version, how many ports in your range are
@@ -617,6 +720,15 @@ The port keeps changing ~
     fixes a port for the project, and the message on fallback names the
     process that held the old one.
 
+It ran my build script instead of serving files ~
+    `auto` only picks the `node` backend for a recognised framework, so this
+    means one was detected. `:LiveServer start live_server` serves the files
+    statically, and `server = "live_server"` makes that the default.
+
+My dev server takes ages and gets marked "no answer" ~
+    Recognised frameworks already get up to 120s. For an unrecognised one,
+    raise `ready.timeout`.
+
 Changes are not reloading ~
     `serve` and `python` have no live reload — the manager marks them
     "no reload". Install `live-server` for injection-based reloading. If you
@@ -636,7 +748,7 @@ Filing a bug ~
     `log = { level = "debug" }`, reproduce, then attach `:LiveServer log`.
 
 ==============================================================================
-16. MIGRATING FROM 0.X                                *live-server-migration*
+17. MIGRATING FROM 0.X                                *live-server-migration*
 
 Everything from the previous version still works. The old commands and the
 `live_server.core` / `live_server.utils` modules forward to the new API and

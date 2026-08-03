@@ -143,6 +143,7 @@ footer.site { border-top: 1px solid var(--border); padding: 2rem 0 3rem; color: 
       <ul>
         <li><a href="#install">Install</a></li>
         <li><a href="#commands">Commands</a></li>
+        <li><a href="#frameworks">Frameworks</a></li>
         <li><a href="#ports">Ports</a></li>
         <li><a href="#ssh">SSH</a></li>
         <li><a href="#security">Security</a></li>
@@ -157,22 +158,26 @@ footer.site { border-top: 1px solid var(--border); padding: 2rem 0 3rem; color: 
 <div class="hero wrap">
   <h1>Start it, forget it, keep the same URL.</h1>
   <p class="tagline">
-    A development server manager for Neovim. Start and stop servers, watch their output,
-    pin a port to a project so its URL never changes, and get sensible behaviour when
-    Neovim is running over SSH.
+    A development server manager for Neovim — static sites and your Next.js, Vite or
+    Express app alike. Start and stop servers, watch their output, pin a port to a project
+    so its URL never changes, and get sensible behaviour when Neovim is running over SSH.
   </p>
   <div class="cta">
     <a class="btn btn-primary" href="#install">Install</a>
     <a class="btn btn-secondary" href="https://github.com/G00380316/live-server.nvim">Source on GitHub</a>
   </div>
 
-  <div class="term" role="img" aria-label="The manager panel: one running live-server for the portfolio project on port 5500, pinned, above a stopped browser-sync on port 3000, with a row of keyboard shortcuts below.">
-    <pre> <span class="run">1 running</span>
+  <div class="term" role="img" aria-label="The manager panel: a running Next.js server for the shop project on port 3000, pinned, and a running live-server for the portfolio project on port 5500 above a stopped browser-sync, with a row of keyboard shortcuts below.">
+    <pre> <span class="run">2 running</span>
+
+  <span class="dim">~/code/shop</span>
+  <span class="run">●</span> Next.js       running    :3000   up 12m   pinned
+     http://127.0.0.1:3000/
 
   <span class="dim">~/code/portfolio</span>
-  <span class="run">●</span> live-server   running    :5500   up 12m   pinned
+  <span class="run">●</span> live-server   running    :5500   up 4m
      http://127.0.0.1:5500/index.html
-  <span class="dim">○ browser-sync  stopped    :3000</span>
+  <span class="dim">○ browser-sync  stopped    :3001</span>
 
  <span class="key">&lt;CR&gt;</span> open  <span class="key">s</span> start/stop  <span class="key">r</span> restart  <span class="key">p</span> port  <span class="key">l</span> logs  <span class="key">?</span> help</pre>
   </div>
@@ -231,7 +236,8 @@ footer.site { border-top: 1px solid var(--border); padding: 2rem 0 3rem; color: 
           </tr>
         </thead>
         <tbody>
-          <tr><td><code>live_server</code></td><td><code>npm i -g live-server</code></td><td>Yes</td><td>Injects CSS without a page reload. Default.</td></tr>
+          <tr><td><code>node</code></td><td>nothing extra</td><td>Per framework</td><td>The project’s <strong>own</strong> dev server. Picked automatically inside a framework project.</td></tr>
+          <tr><td><code>live_server</code></td><td><code>npm i -g live-server</code></td><td>Yes</td><td>Injects CSS without a page reload.</td></tr>
           <tr><td><code>browser_sync</code></td><td><code>npm i -g browser-sync</code></td><td>Yes</td><td>Syncs scroll, clicks and input across devices.</td></tr>
           <tr><td><code>serve</code></td><td><code>npm i -g serve</code> or npx</td><td>No</td><td>Clean URLs, correct MIME types, production-like.</td></tr>
           <tr><td><code>python</code></td><td>already installed</td><td>No</td><td>Zero-install fallback.</td></tr>
@@ -292,6 +298,54 @@ footer.site { border-top: 1px solid var(--border); padding: 2rem 0 3rem; color: 
     </div>
     <p style="margin-top:1rem">Every one of these is also a <code>:LiveServer</code>
     subcommand — nothing is keyboard-only.</p>
+  </div>
+</section>
+
+<section id="frameworks">
+  <div class="wrap">
+    <h2>Next.js, Vite, Express &amp; friends</h2>
+    <p>In a framework project, <code>:LiveServer toggle</code> runs the dev server the
+    repository already defines — rather than serving your source tree as files, which
+    would just render a page of raw JSX.</p>
+
+    <pre class="code"><code>:LiveServer toggle    # -&gt; pnpm run dev --port 3000 --host 127.0.0.1</code></pre>
+
+    <div class="grid">
+      <div class="card">
+        <h3>Detected, not configured</h3>
+        <p>The framework comes from <code>package.json</code> dependencies — most specific
+        first, so SvelteKit is never mistaken for the Vite it is built on — and the package
+        manager from the lockfile.</p>
+      </div>
+      <div class="card">
+        <h3>The port arrives correctly</h3>
+        <p>Next.js gets <code>--hostname</code>, others get <code>--host</code>, Vite gets
+        <code>--strictPort</code> so it fails instead of drifting. Express and CRA get
+        <code>PORT</code> in the environment, the convention they share.</p>
+      </div>
+      <div class="card">
+        <h3>It believes the process</h3>
+        <p>Hard-coded <code>app.listen(4000)</code>? The plugin reads the address the server
+        announces, adopts that port and says so. A working server is never reported as
+        unreachable because of our bookkeeping.</p>
+      </div>
+    </div>
+
+    <h3>It asks before it runs anything</h3>
+    <p>Serving files reads files. Starting a dev server executes code the repository wrote,
+    so the first time it shows you exactly what that is.</p>
+    <div class="term">
+      <pre>Run the Next.js dev server defined by this repository?
+
+  <span class="key">script:</span>  dev = next dev
+  <span class="key">via:</span>     pnpm
+
+<span class="dim">Defined in ~/code/shop/package.json. This executes code from the repository.</span></pre>
+    </div>
+    <p style="margin-top:1rem">The answer is remembered against <em>that script</em>, not the
+    whole file — a dependency bump won’t ask again, but changing what <code>dev</code> runs
+    will. Recognised frameworks also get a longer startup budget, because a cold Next.js
+    compile can take a minute before the port answers.</p>
   </div>
 </section>
 
@@ -359,9 +413,9 @@ Forward it from your machine:
       </div>
       <div class="card">
         <h3>No accidental code execution</h3>
-        <p>A project file may say <em>where</em> to serve freely. Fields that decide
-        <em>what runs</em> need consent, recorded against the exact file contents. Any
-        edit revokes it and asks again, showing the command it wants to run.</p>
+        <p>Nothing a repository defines — project-file <code>command</code> fields or
+        <code>package.json</code> dev scripts — runs without consent, recorded against the
+        exact command. Any edit revokes it and asks again, showing what it wants to run.</p>
       </div>
       <div class="card">
         <h3>No shell, ever</h3>

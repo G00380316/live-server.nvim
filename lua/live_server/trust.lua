@@ -149,6 +149,42 @@ function M.request(opts, callback)
   end)
 end
 
+--- Ask whether to run a command the repository defines — an npm script, a
+--- framework dev server. Same consent model as a project file: recorded
+--- against the exact command, so editing the script asks again.
+---@param opts { path: string, content: string, describe: string[], label: string }
+---@param callback fun(granted: boolean)
+function M.request_command(opts, callback)
+  local prompt = table.concat({
+    ("Run the %s defined by this repository?"):format(opts.label),
+    "",
+    table.concat(opts.describe, "\n"),
+    "",
+    ("Defined in %s. This executes code from the repository."):format(vim.fn.fnamemodify(opts.path, ":~:.")),
+  }, "\n")
+
+  vim.ui.select({
+    "Deny — do not run it",
+    "Allow once (this session)",
+    "Allow and remember this command",
+    "Open the file first",
+  }, { prompt = prompt }, function(choice)
+    if choice == nil or choice:match("^Deny") then
+      M.record(opts.path, opts.content, "deny")
+      return callback(false)
+    end
+    if choice:match("^Open") then
+      vim.cmd.split(vim.fn.fnameescape(opts.path))
+      log.notify("Review it, then run the command again.", "info")
+      return callback(false)
+    end
+    if choice:match("^Allow and remember") then
+      M.record(opts.path, opts.content, "allow")
+    end
+    callback(true)
+  end)
+end
+
 --- Resolve trust for a project, prompting only when a decision is genuinely
 --- needed. `callback(granted)` runs on the main loop.
 ---@param project live_server.Project

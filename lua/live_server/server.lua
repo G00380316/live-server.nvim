@@ -14,6 +14,9 @@ local util = require("live_server.util")
 
 local M = {}
 
+--- `vim.islist` on 0.10+, `vim.tbl_islist` on 0.9.
+local islist = vim.islist or vim.tbl_islist
+
 ---@alias live_server.Status
 ---| "starting"   process spawned, port not answering yet
 ---| "running"    port confirmed accepting connections
@@ -92,8 +95,13 @@ function M.new(opts)
   return server
 end
 
---- Build the argv for this server.
----@return string[]
+--- Build the command for this server.
+---
+--- Adapters may return a bare argv list, or `{ argv = …, env = … }` when the
+--- process needs environment variables — the only way to give a port to an
+--- Express app or a Create React App build, neither of which takes a flag.
+---@return string[] argv
+---@return table<string, string> env
 function Server:build_argv()
   local cfg = require("live_server.config").get()
 
@@ -117,10 +125,17 @@ function Server:build_argv()
     for _, arg in ipairs(ctx.extra) do
       argv[#argv + 1] = arg
     end
-    return argv
+    return argv, {}
   end
 
-  return self.adapter.build(ctx)
+  local built = self.adapter.build(ctx)
+  if islist(built) then
+    return built, {}
+  end
+  if type(built) ~= "table" or not islist(built.argv) then
+    error(("adapter %s returned neither an argv list nor { argv = ... }"):format(self.adapter.name), 0)
+  end
+  return built.argv, built.env or {}
 end
 
 --- Base URL, optionally with a page path appended.
@@ -142,6 +157,31 @@ function Server:url(path)
     return base .. "/"
   end
   return base .. "/" .. (path:gsub("^/+", ""))
+end
+
+--- Label for this server. A `node` adapter running a Next.js app should read
+--- as "Next.js", because that is what the developer thinks they started.
+---@return string
+function Server:display_name()
+  if self._display_name then
+    return self._display_name
+  end
+  self._display_name = require("live_server.adapters").display_for(self.adapter.name, self.project)
+  return self._display_name
+end
+
+--- Whether changes reach the browser without a manual refresh. Adapters that
+--- wrap a project can only answer this once the project is known: Vite has
+--- HMR, a bare Express app does not.
+---@return boolean
+function Server:has_live_reload()
+  if type(self.adapter.live_reload_for) == "function" then
+    local ok, value = pcall(self.adapter.live_reload_for, self.project)
+    if ok and type(value) == "boolean" then
+      return value
+    end
+  end
+  return self.adapter.live_reload == true
 end
 
 ---@return integer milliseconds since the process started
@@ -176,7 +216,8 @@ function Server:info()
     uptime = self:uptime(),
     restarts = self.restarts,
     exposed = self.exposed,
-    live_reload = self.adapter.live_reload,
+    live_reload = self:has_live_reload(),
+    display = self:display_name(),
   }
 end
 
@@ -188,7 +229,43 @@ function Server:append_log(stream, line)
     return
   end
   self.logs:push({ at = util.now(), stream = stream, text = line })
+  if stream ~= "system" then
+    self:_check_port_drift(line)
+  end
   event.emit("output", { server = self, stream = stream, text = line })
+end
+
+--- Dev servers print the address they actually bound. Believe them.
+---
+--- An Express app with a hard-coded `app.listen(4000)` ignores the `PORT` we
+--- set; a framework that walks past a busy port lands somewhere else. In both
+--- cases the process is healthy and only our bookkeeping is wrong, so adopt
+--- the port it reported rather than reporting a working server as dead.
+---@param line string
+function Server:_check_port_drift(line)
+  if self.status ~= "starting" or not self.adapter.url_pattern then
+    return
+  end
+
+  local found = line:match(self.adapter.url_pattern)
+  local detected = tonumber(found)
+  if not detected or detected == self.port or not net.valid_port(detected) then
+    return
+  end
+
+  -- Only trust it once something is really listening there: build output can
+  -- mention unrelated URLs.
+  if not net.is_listening(self.host, detected, 200) then
+    return
+  end
+
+  local previous = self.port
+  port_mod.release(previous)
+  self.port = detected
+  self:append_log("system", ("bound to port %d instead of %d — following it"):format(detected, previous))
+  log.info("adopted the port the process reported", { from = previous, to = detected, id = self.id })
+  self:_watch_ready()
+  event.emit("changed", { server = self })
 end
 
 ---@param limit? integer
@@ -264,7 +341,7 @@ function Server:start(callback)
     return callback(false, "already running")
   end
 
-  local ok, argv = pcall(function()
+  local ok, argv, built_env = pcall(function()
     return self:build_argv()
   end)
   if not ok or type(argv) ~= "table" or #argv == 0 then
@@ -273,6 +350,7 @@ function Server:start(callback)
     return callback(false, err)
   end
   self.argv = argv
+  self.built_env = built_env or {}
 
   self._intentional = false
   self.exit_code = nil
@@ -290,7 +368,7 @@ function Server:start(callback)
     NO_COLOR = "1",
     FORCE_COLOR = "0",
     BROWSER = "none",
-  }, self.env)
+  }, self.built_env or {}, self.env)
 
   log.info("spawning server", { argv = argv, cwd = self.project.root, port = self.port })
 
@@ -332,9 +410,37 @@ function Server:start(callback)
   self:append_log("system", "$ " .. util.join_argv(argv))
   event.emit("starting", { server = self })
 
+  self:_watch_ready()
+end
+
+--- How long this server may take to answer. Frameworks compile before they
+--- listen, so a fixed budget that suits live-server would report a perfectly
+--- healthy Next.js app as broken.
+---@return integer
+function Server:ready_budget()
   local cfg = require("live_server.config").get()
+  if type(self.adapter.ready_timeout) == "function" then
+    local ok, override = pcall(self.adapter.ready_timeout, self.project)
+    if ok and type(override) == "number" and override > 0 then
+      return math.max(override, cfg.ready.timeout)
+    end
+  end
+  return cfg.ready.timeout
+end
+
+--- Poll until the port answers. Split out from `start` so it can be re-aimed
+--- when the process reports a different port than we asked for.
+function Server:_watch_ready()
+  local cfg = require("live_server.config").get()
+  local budget = self:ready_budget()
+
+  if self._cancel_ready then
+    self._cancel_ready()
+    self._cancel_ready = nil
+  end
+
   self._cancel_ready = net.wait_until_ready(self.host, self.port, {
-    timeout = cfg.ready.timeout,
+    timeout = budget,
     interval = cfg.ready.interval,
     cancelled = function()
       return self.status ~= "starting"
@@ -360,7 +466,7 @@ function Server:start(callback)
       local message = ("%s did not respond on port %d within %ds"):format(
         self.adapter.display,
         self.port,
-        math.floor(cfg.ready.timeout / 1000)
+        math.floor(budget / 1000)
       )
       self:append_log("system", message)
       log.warn(message, { detail = detail })

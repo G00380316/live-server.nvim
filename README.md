@@ -2,17 +2,21 @@
 
 A development server manager for Neovim. Start it, forget it, keep the same URL.
 
-Manage local dev servers without leaving the editor: start and stop them, watch their
-output, pin a port to a project so its URL never changes, and get sensible behaviour
-when Neovim is running over SSH.
+Manage local dev servers without leaving the editor — static sites *and* your Next.js,
+Vite or Express app. Start and stop them, watch their output, pin a port to a project so
+its URL never changes, and get sensible behaviour when Neovim is running over SSH.
 
 ```
- 1 running
+ 2 running
+
+  ~/code/shop
+  ● Next.js       running    :3000   up 12m   pinned
+     http://127.0.0.1:3000/
 
   ~/code/portfolio
-  ● live-server   running    :5500   up 12m   pinned
+  ● live-server   running    :5500   up 4m
      http://127.0.0.1:5500/index.html
-  ○ browser-sync  stopped    :3000
+  ○ browser-sync  stopped    :3001
 
  <CR> open  s start/stop  r restart  p port  l logs  y copy  a new  ? help
 ```
@@ -37,12 +41,14 @@ Neovim 0.9+, plus at least one backend. The plugin finds whichever you have.
 
 | Backend | Install | Live reload | Notes |
 | --- | --- | --- | --- |
-| `live_server` | `npm i -g live-server` | yes | Injects CSS without a page reload. Default. |
+| `node` | nothing extra | per framework | The project's **own** dev server. Picked automatically inside a framework project. |
+| `live_server` | `npm i -g live-server` | yes | Injects CSS without a page reload. |
 | `browser_sync` | `npm i -g browser-sync` | yes | Syncs scroll, clicks and input across devices. |
 | `serve` | `npm i -g serve` (or npx) | no | Clean URLs, correct MIME types, production-like. |
 | `python` | already installed | no | Zero-install fallback. |
 
-No `pgrep`, no `pkill`, no shell. `:checkhealth live_server` reports what it found.
+No `pgrep`, no `pkill`, no shell. `:checkhealth live_server` reports what it found —
+including which framework it detected in the current project and what it would run.
 
 ## Install
 
@@ -127,6 +133,54 @@ Every one of these is also a `:LiveServer` subcommand — nothing is keyboard-on
 The log view tails output live and stops following the moment you scroll up, so
 reading a stack trace is never interrupted.
 
+## Node and framework projects
+
+In a Next.js, Vite, Nuxt, Astro, SvelteKit, Angular, Express (…) project, `:LiveServer
+toggle` runs **the dev server the repository already defines** rather than serving your
+source tree as files:
+
+```
+:LiveServer toggle          # -> pnpm run dev --port 3000 --host 127.0.0.1
+```
+
+The framework comes from `package.json` dependencies (most specific first, so SvelteKit
+is not mistaken for the Vite it is built on), and the package manager from the lockfile —
+`pnpm-lock.yaml`, `yarn.lock`, `bun.lockb`, `package-lock.json`.
+
+**Ports reach the process the way that framework expects.** Next.js gets `--hostname`,
+everything else gets `--host`; Vite and SvelteKit also get `--strictPort` so they fail
+loudly instead of drifting somewhere we would then report incorrectly. Express, CRA,
+NestJS and unrecognised scripts get `PORT`/`HOST` in the environment, the one convention
+they all share.
+
+**If the process announces a different address than we asked for** — the classic
+hard-coded `app.listen(4000)` — the plugin believes the process, adopts that port, and
+says so. A working server is never shown as unreachable because of our own bookkeeping.
+
+**Cold starts are budgeted per framework.** A Next.js or Angular compile gets up to 120s
+before it is called unhealthy, instead of the 15s that suits a static server.
+
+### It asks before it runs anything
+
+Serving static files reads files. Starting a dev server *executes code the repository
+wrote*, so the first time it shows you exactly what that is:
+
+```
+Run the Next.js dev server defined by this repository?
+
+  script:  dev = next dev
+  via:     pnpm
+
+Defined in ~/code/shop/package.json. This executes code from the repository.
+```
+
+The answer is remembered against **that script**, not the whole file — a dependency bump
+won't ask again, but changing what `dev` runs will.
+
+`auto` only picks this backend for a *recognised* framework. A plain `package.json` whose
+`start` script is `node build.js` is a build step, not a web server; `auto` falls through
+to a static server, and `:LiveServer start node` runs it anyway if that's what you meant.
+
 ## Ports that stay put
 
 By default the port a project ends up with is remembered and reused forever:
@@ -192,11 +246,11 @@ A dev server serves your working tree, including files you have not committed.
 
 - **Loopback by default.** Servers bind `127.0.0.1`. Exposing one to the network is a
   deliberate, confirmed act (`:LiveServer expose`).
-- **Project files cannot execute code by accident.** `.liveserverrc.json` may set where
-  and how to serve without a prompt. Fields that decide *what runs* (`command`, `args`,
-  `env`) require consent, recorded against the exact file contents — the same model as
-  Neovim's `:trust`. Any edit, by a teammate or a malicious PR, revokes it and asks
-  again, showing the exact command it wants to run.
+- **Nothing from a repository executes without consent.** That covers both
+  `.liveserverrc.json` fields that decide *what runs* (`command`, `args`, `env`) and
+  `package.json` dev scripts. Consent is recorded against the exact command — the same
+  model as Neovim's `:trust` — so any edit, by a teammate or a malicious PR, revokes it
+  and asks again, showing what it wants to run.
 - Processes are spawned with argv lists, never a shell string.
 - A project file may not serve a directory outside its own project.
 - Privileged ports are rejected; only local `http://` URLs are handed to a browser;
@@ -215,10 +269,13 @@ require("live_server").setup({
   host = "127.0.0.1",
   expose = "ask",             -- true | false | "ask"
 
+  -- `node` first: a project that ships its own dev server almost always means it.
+  adapter_priority = { "node", "live_server", "browser_sync", "serve", "python" },
+
   port = {
     strategy = "pin",         -- "pin" | "scan" | "stable" | "fixed"
     range = { 5500, 5599 },
-    defaults = { live_server = 5500, browser_sync = 3000 },
+    defaults = { node = 3000, live_server = 5500, browser_sync = 3000 },
   },
 
   root = {

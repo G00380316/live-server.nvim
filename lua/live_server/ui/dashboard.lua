@@ -99,7 +99,7 @@ local function badges(server)
   if server.exposed then
     out[#out + 1] = icons.prefix("exposed") .. "network"
   end
-  if not server.adapter.live_reload and server:is_active() then
+  if not server:has_live_reload() and server:is_active() then
     out[#out + 1] = "no reload"
   end
   if server.restarts > 0 then
@@ -171,7 +171,7 @@ local function build_rows(servers, width)
   -- then capped so one long backend name cannot push the rest off screen.
   local adapter_width, port_width = 0, 0
   for _, server in ipairs(servers) do
-    adapter_width = math.max(adapter_width, util.width(server.adapter.display))
+    adapter_width = math.max(adapter_width, util.width(server:display_name()))
     port_width = math.max(port_width, util.width(tostring(server.port)))
   end
   adapter_width = math.floor(util.clamp(adapter_width, 6, math.max(10, width * 0.25)))
@@ -213,7 +213,7 @@ local function build_rows(servers, width)
       text = append(
         text,
         server_marks,
-        util.pad(util.truncate(server.adapter.display, adapter_width), adapter_width + 2),
+        util.pad(util.truncate(server:display_name(), adapter_width), adapter_width + 2),
         "LiveServerAdapter"
       )
       text = append(text, server_marks, util.pad(STATUS_LABEL[server.status] or server.status, 11), glyph_group)

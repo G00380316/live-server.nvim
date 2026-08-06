@@ -32,6 +32,14 @@ local links = {
   LiveServerLogErr = "DiagnosticError",
   LiveServerLogMeta = "Comment",
   LiveServerLogTime = "Comment",
+  -- Cycled across services in the combined log view. Linked to groups every
+  -- colorscheme defines and keeps visually distinct from each other.
+  LiveServerLogService1 = "Function",
+  LiveServerLogService2 = "String",
+  LiveServerLogService3 = "Type",
+  LiveServerLogService4 = "Constant",
+  LiveServerLogService5 = "Identifier",
+  LiveServerLogService6 = "Special",
 }
 
 --- Fallbacks for groups a colorscheme may not define.

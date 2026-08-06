@@ -506,6 +506,10 @@ local function action_logs()
   end
 end
 
+local function action_logs_all()
+  require("live_server.ui.logs").open_all()
+end
+
 local function action_yank()
   local server = require_server("Move to a server to copy its URL.")
   if not server then
@@ -671,6 +675,7 @@ local function action_help()
     { label(keys.change_port), "Move it to a different port" },
     { label(keys.pin_port), "Pin / unpin this port to the project" },
     { label(keys.logs), "Show the process output" },
+    { label(keys.logs_all), "Show every service's output, interleaved" },
     { label(keys.yank_url), "Copy the URL to the clipboard" },
     { label(keys.new), "Start a new server here" },
     { label(keys.start_all), "Start every app in this repository" },
@@ -754,6 +759,7 @@ function M.open()
   window:map(keys.toggle, action_toggle, "Start/stop server")
   window:map(keys.restart, action_restart, "Restart server")
   window:map(keys.logs, action_logs, "Show server output")
+  window:map(keys.logs_all, action_logs_all, "Show every server's output")
   window:map(keys.yank_url, action_yank, "Copy URL")
   window:map(keys.change_port, action_change_port, "Change port")
   window:map(keys.pin_port, action_pin, "Pin/unpin port")

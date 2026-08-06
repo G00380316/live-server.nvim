@@ -154,6 +154,27 @@ local function read_project_file(root)
           end
         elseif key == "watch" and type(value) == "table" then
           safe.watch = value
+        elseif key == "apps" and type(value) == "table" then
+          -- A declared list of services, so a fresh clone starts the same set
+          -- on the same ports as everyone else. Only placement is described
+          -- here; anything that decides *what runs* stays privileged.
+          local apps = {}
+          for _, entry in ipairs(value) do
+            if type(entry) == "table" and type(entry.dir) == "string" then
+              apps[#apps + 1] = {
+                dir = entry.dir,
+                port = type(entry.port) == "number" and entry.port or nil,
+                server = type(entry.server) == "string" and entry.server or nil,
+                name = type(entry.name) == "string" and entry.name or nil,
+                open = type(entry.open) == "string" and entry.open or nil,
+              }
+            elseif type(entry) == "string" then
+              apps[#apps + 1] = { dir = entry }
+            end
+          end
+          if #apps > 0 then
+            safe.apps = apps
+          end
         elseif vim.tbl_contains(require("live_server.trust").PRIVILEGED_FIELDS, key) then
           privileged[key] = value
         else

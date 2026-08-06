@@ -35,6 +35,89 @@ jobs:
       - name: Run tests
         run: make test
 
+  # Windows cannot be verified locally, so CI is the only place the platform
+  # branches (taskkill, tasklist, the browser opener) are ever executed.
+  test-windows:
+    name: test (windows-latest, nvim stable)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      # `make` is not guaranteed on the Windows image, so drive the runner
+      # directly. Git Bash ships with the image and gives us the same shell
+      # semantics for setting the sandbox variables.
+      - name: Run tests
+        shell: bash
+        run: |
+          export LIVE_SERVER_TEST_HOME="$PWD/.test-home"
+          export XDG_DATA_HOME="$LIVE_SERVER_TEST_HOME/data"
+          export XDG_STATE_HOME="$LIVE_SERVER_TEST_HOME/state"
+          export XDG_CACHE_HOME="$LIVE_SERVER_TEST_HOME/cache"
+          export XDG_CONFIG_HOME="$LIVE_SERVER_TEST_HOME/config"
+          mkdir -p "$LIVE_SERVER_TEST_HOME"
+          nvim --headless -u NONE -l tests/run.lua
+
+  # The offline suite uses hand-written stand-in servers so it needs no network.
+  # This job is the counterweight: a real framework, really installed, really
+  # started, so the argv we construct is checked against the actual CLI.
+  test-frameworks:
+    name: real frameworks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Scaffold a real Vite app
+        run: |
+          mkdir -p /tmp/fixtures
+          cd /tmp/fixtures
+          npx --yes create-vite@latest vite-app --template vanilla
+          cd vite-app && npm install --no-audit --no-fund
+          git init -q . && git add -A && git -c user.email=ci@example.com -c user.name=CI commit -qm init
+
+      - name: Scaffold a real Express app
+        run: |
+          cd /tmp/fixtures
+          mkdir -p express-app && cd express-app
+          npm init -y >/dev/null
+          npm install express --no-audit --no-fund
+          cat > server.js <<'EOF'
+          const express = require("express");
+          const app = express();
+          app.get("/", (_, res) => res.send("<h1>express</h1>"));
+          app.listen(Number(process.env.PORT), "127.0.0.1", () =>
+            console.log("listening on http://127.0.0.1:" + process.env.PORT));
+          EOF
+          npm pkg set scripts.start="node server.js" >/dev/null
+          git init -q . && git add -A && git -c user.email=ci@example.com -c user.name=CI commit -qm init
+
+      - name: Run the framework suite
+        env:
+          LIVE_SERVER_TEST_FRAMEWORKS: /tmp/fixtures
+        run: |
+          export LIVE_SERVER_TEST_HOME="$PWD/.test-home"
+          export XDG_DATA_HOME="$LIVE_SERVER_TEST_HOME/data"
+          export XDG_STATE_HOME="$LIVE_SERVER_TEST_HOME/state"
+          mkdir -p "$LIVE_SERVER_TEST_HOME"
+          nvim --headless -u NONE -l tests/run.lua framework_real
+
   lint:
     name: lint and format
     runs-on: ubuntu-latest

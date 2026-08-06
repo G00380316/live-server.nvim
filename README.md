@@ -214,6 +214,26 @@ the buffer you're in, then a remembered answer, then it asks you once.
 :LiveServer start dir=api " skip the question entirely
 ```
 
+**Or write the list down.** Commit an `apps` list and every clone starts the same
+services on the same ports — no discovery, no prompt, ports used verbatim:
+
+```json
+{
+  "apps": [
+    { "dir": "web",           "port": 3000, "name": "Frontend" },
+    { "dir": "server",        "port": 5000 },
+    { "dir": "server/socket", "port": 5001 }
+  ]
+}
+```
+
+**One window for all the output.** `:LiveServer logs all` (or `L` in the manager)
+interleaves every service in the order things actually happened, tagged and coloured
+per service; `1`-`9` narrows to one, `0` shows them all. That's the view that answers
+"the frontend broke — what was the API doing at that moment".
+
+**Stop just this repo** with `:LiveServer stop repo`, leaving your other projects alone.
+
 **Every service at once.** Servers are identified by their working directory, not the
 repository, so they all run together, each on its own port with its own pin:
 
@@ -325,6 +345,10 @@ A dev server serves your working tree, including files you have not committed.
   model as Neovim's `:trust` — so any edit, by a teammate or a malicious PR, revokes it
   and asks again, showing what it wants to run.
 - Processes are spawned with argv lists, never a shell string.
+- Stopping records the process tree first, then kills it from the leaves up — the
+  process holding a port is usually a grandchild of the launcher. If a port is still
+  held afterwards, the plugin says so and names the holder rather than claiming a
+  clean stop.
 - A project file may not serve a directory outside its own project.
 - Privileged ports are rejected; only local `http://` URLs are handed to a browser;
   state files are written `0600`.
@@ -480,6 +504,11 @@ make test-unit   # everything except the integration specs
 make lint        # luacheck, if installed
 make format      # stylua, if installed
 ```
+
+CI additionally runs the suite on Windows (the only place the `taskkill`/`tasklist`
+paths execute) and a job that scaffolds a real Vite app and a real Express app,
+installs them, and starts them through the plugin — so the flags we build are checked
+against the actual CLIs, not against stand-ins.
 
 Tests point `XDG_*` at `./.test-home`, so a run can never touch your real port pins or
 trust records.

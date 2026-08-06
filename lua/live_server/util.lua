@@ -8,8 +8,10 @@ local M = {}
 --- libuv handle, compatible with Neovim 0.9 (`vim.loop`) and 0.10+ (`vim.uv`).
 M.uv = vim.uv or vim.loop
 
+--- `has("win32")` is true for every Windows build including 64-bit, and is what
+--- Neovim itself uses. Parsing `uname` is a guess by comparison.
 ---@type boolean
-M.is_windows = M.uv.os_uname().sysname:find("Windows") ~= nil
+M.is_windows = vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1
 ---@type boolean
 M.is_mac = M.uv.os_uname().sysname == "Darwin"
 ---@type boolean

@@ -484,3 +484,236 @@ http.createServer((_, res) => { res.writeHead(200); res.end("ok"); })
   config.did_setup = false
   config.setup({})
 end)
+
+t.describe("stopping a layered process", function()
+  if util.is_windows then
+    t.skip("escaped process cleanup", "the fixture needs a POSIX shell")
+    return
+  end
+  if not util.executable("python3") then
+    t.skip("escaped process cleanup", "python3 is needed to detach the fixture into its own session")
+    return
+  end
+
+  t.it("releases the port when the server escapes the process group", function()
+    -- The real shape: npm -> nodemon -> node, where only the deepest process
+    -- holds the port. Here the launcher deliberately ignores SIGTERM, which is
+    -- exactly the failure mode that used to leak a listening server.
+    config.did_setup = false
+    config.setup({
+      server = "node",
+      browser = { auto_open = false },
+      detect_orphans = false,
+      restart = { on_crash = false },
+      project = { trust = "allow" },
+      port = { strategy = "scan", range = { 6300, 6330 }, remember = false },
+      ready = { timeout = 30000 },
+    })
+
+    local root = util.normalize(vim.fn.tempname())
+    vim.fn.mkdir(root .. "/.git", "p")
+    util.write_file(root .. "/.git/HEAD", "ref: refs/heads/main")
+    util.write_file(
+      root .. "/server.js",
+      [[
+const http = require("http");
+http.createServer((_, res) => { res.writeHead(200); res.end("ok"); })
+  .listen(Number(process.env.PORT), "127.0.0.1", () => console.log("ready on port " + process.env.PORT));
+]]
+    )
+    -- Two things make this escape an ordinary stop: the launcher ignores
+    -- SIGTERM, and the server puts itself in a new session, so it is no longer
+    -- in the process group Neovim signals. Verified by hand: without the
+    -- process-tree walk the port stays held indefinitely.
+    util.write_file(
+      root .. "/launch.sh",
+      table.concat({
+        "#!/bin/sh",
+        "trap '' TERM",
+        "python3 -c 'import os,sys; os.setsid(); os.execvp(sys.argv[1], sys.argv[1:])' node server.js &",
+        "wait",
+        "",
+      }, "\n")
+    )
+    util.write_file(
+      root .. "/package.json",
+      '{"name":"layered","private":true,"dependencies":{"express":"4"},"scripts":{"start":"sh launch.sh"}}'
+    )
+    framework.invalidate()
+    project_mod.invalidate()
+    require("live_server.discover").invalidate()
+
+    local started, failure = nil, nil
+    manager.start({ dir = root }, function(server, err)
+      started, failure = server, err
+    end)
+    t.truthy(
+      vim.wait(40000, function()
+        return started ~= nil or failure ~= nil
+      end, 100),
+      "start never completed"
+    )
+    t.truthy(started, "layered server failed to start: " .. tostring(failure))
+
+    local port = started.port
+    t.truthy(net.is_listening("127.0.0.1", port, 1000))
+
+    manager.stop(started)
+    t.truthy(
+      vim.wait(15000, function()
+        return not started:is_active()
+      end, 100),
+      "the server never reported as stopped"
+    )
+    t.truthy(
+      vim.wait(15000, function()
+        return net.is_free("127.0.0.1", port)
+      end, 200),
+      "the port is still held — a descendant outlived the launcher we signalled"
+    )
+    manager.prune()
+    config.did_setup = false
+    config.setup({})
+  end)
+end)
+
+t.describe("a declared service list", function()
+  t.it("starts each service on the port the repository asked for", function()
+    config.did_setup = false
+    config.setup({
+      browser = { auto_open = false },
+      detect_orphans = false,
+      restart = { on_crash = false },
+      project = { trust = "allow" },
+      port = { strategy = "pin", remember = false },
+      ready = { timeout = 30000 },
+    })
+
+    local root = util.normalize(vim.fn.tempname())
+    vim.fn.mkdir(root .. "/.git", "p")
+    util.write_file(root .. "/.git/HEAD", "ref: refs/heads/main")
+
+    local body = [[
+const http = require("http");
+http.createServer((_, res) => { res.writeHead(200); res.end("ok"); })
+  .listen(Number(process.env.PORT), "127.0.0.1", () => console.log("ready"));
+]]
+    -- Ports chosen high and unlikely to clash, exactly as a team would commit.
+    local wanted = { web = 6501, api = 6502 }
+    for dir, port in pairs(wanted) do
+      vim.fn.mkdir(root .. "/" .. dir, "p")
+      util.write_file(root .. "/" .. dir .. "/app.js", body)
+      util.write_file(
+        root .. "/" .. dir .. "/package.json",
+        ('{"name":"%s","private":true,"dependencies":{"express":"4"},"scripts":{"start":"node app.js"}}'):format(dir)
+      )
+      if not net.is_free("127.0.0.1", port) then
+        t.skip("declared ports", "port " .. port .. " is already taken on this machine")
+        return
+      end
+    end
+    util.write_file(
+      root .. "/.liveserverrc.json",
+      ('{"apps":[{"dir":"web","port":%d},{"dir":"api","port":%d}]}'):format(wanted.web, wanted.api)
+    )
+
+    framework.invalidate()
+    project_mod.invalidate()
+    require("live_server.discover").invalidate()
+
+    local result = nil
+    manager.start_all({ dir = root }, function(started, failures)
+      result = { started = started, failures = failures }
+    end)
+    t.truthy(
+      vim.wait(90000, function()
+        return result ~= nil
+      end, 200),
+      "start_all never finished"
+    )
+    t.eq(#result.failures, 0, "failures: " .. vim.inspect(result.failures))
+    t.eq(#result.started, 2)
+
+    local by_dir = {}
+    for _, server in ipairs(result.started) do
+      by_dir[util.relative(root, server.project.workdir)] = server.port
+    end
+    t.eq(by_dir.web, wanted.web, "the declared port must be used verbatim")
+    t.eq(by_dir.api, wanted.api)
+
+    manager.stop_project(root, { quiet = true })
+    vim.wait(15000, function()
+      return manager.count_active() == 0
+    end, 100)
+    manager.prune()
+    config.did_setup = false
+    config.setup({})
+  end)
+
+  t.it("stops only this repository", function()
+    config.did_setup = false
+    config.setup({
+      browser = { auto_open = false },
+      detect_orphans = false,
+      project = { trust = "allow" },
+      port = { strategy = "scan", range = { 6520, 6550 }, remember = false },
+      ready = { timeout = 30000 },
+    })
+
+    local body = [[
+const http = require("http");
+http.createServer((_, res) => { res.writeHead(200); res.end("ok"); })
+  .listen(Number(process.env.PORT), "127.0.0.1", () => console.log("ready"));
+]]
+    ---@return string
+    local function one_app_repo()
+      local root = util.normalize(vim.fn.tempname())
+      vim.fn.mkdir(root .. "/.git", "p")
+      util.write_file(root .. "/.git/HEAD", "ref: refs/heads/main")
+      vim.fn.mkdir(root .. "/app", "p")
+      util.write_file(root .. "/app/app.js", body)
+      util.write_file(
+        root .. "/app/package.json",
+        '{"name":"a","private":true,"dependencies":{"express":"4"},"scripts":{"start":"node app.js"}}'
+      )
+      return root
+    end
+
+    require("live_server.discover").invalidate()
+    framework.invalidate()
+    project_mod.invalidate()
+
+    local first_root, second_root = one_app_repo(), one_app_repo()
+    local first, second = nil, nil
+    manager.start({ dir = first_root .. "/app" }, function(s)
+      first = s
+    end)
+    t.truthy(vim.wait(40000, function()
+      return first ~= nil
+    end, 100))
+    manager.start({ dir = second_root .. "/app" }, function(s)
+      second = s
+    end)
+    t.truthy(vim.wait(40000, function()
+      return second ~= nil
+    end, 100))
+
+    local stopped = manager.stop_project(first_root, { quiet = true })
+    t.eq(stopped, 1)
+    t.truthy(
+      vim.wait(10000, function()
+        return not first:is_active()
+      end, 100),
+      "the targeted repository did not stop"
+    )
+    t.truthy(second:is_active(), "the other repository must be left alone")
+
+    manager.stop_all()
+    vim.wait(15000, function()
+      return manager.count_active() == 0
+    end, 100)
+    manager.prune()
+    config.did_setup = false
+    config.setup({})
+  end)
+end)

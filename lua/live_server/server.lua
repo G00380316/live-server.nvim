@@ -10,6 +10,7 @@ local event = require("live_server.event")
 local log = require("live_server.log")
 local net = require("live_server.net")
 local port_mod = require("live_server.port")
+local process = require("live_server.process")
 local util = require("live_server.util")
 
 local M = {}
@@ -53,6 +54,16 @@ Server.__index = Server
 
 ---@type integer
 local next_id = 0
+
+--- Global, monotonic across every server.
+---
+--- `uv.now()` is the event loop's *cached* time, so several lines produced in
+--- one tick — which is exactly what happens when four services start together —
+--- carry an identical timestamp. Ordering on time alone then degrades to
+--- "grouped by whichever server was iterated first", which is the opposite of
+--- what a combined log is for.
+---@type integer
+local log_sequence = 0
 
 ---@class live_server.ServerOpts
 ---@field adapter live_server.AdapterSpec
@@ -243,7 +254,8 @@ function Server:append_log(stream, line)
   if vim.trim(line) == "" then
     return
   end
-  self.logs:push({ at = util.now(), stream = stream, text = line })
+  log_sequence = log_sequence + 1
+  self.logs:push({ at = util.now(), seq = log_sequence, stream = stream, text = line })
   if stream ~= "system" then
     self:_check_port_drift(line)
   end
@@ -303,7 +315,7 @@ function Server:_check_port_drift(line)
 end
 
 ---@param limit? integer
----@return { at: integer, stream: string, text: string }[]
+---@return { at: integer, seq: integer, stream: string, text: string }[]
 function Server:log_lines(limit)
   return self.logs:list(limit)
 end
@@ -491,6 +503,8 @@ function Server:_watch_ready()
       self.ready_at = util.now()
       self.restarts = 0
       self.status = "running"
+      -- The tree is fully established by the time the port answers.
+      self:_snapshot_tree()
       log.info("server ready", { url = self:url(), pid = self.pid })
       event.emit("ready", { server = self })
       self:_settle_start(true, nil)
@@ -514,6 +528,7 @@ end
 function Server:_on_exit(code)
   self.exit_code = code
   self.stopped_at = util.now()
+  local pid_before_exit = self.pid
   self.job = nil
   self.pid = nil
 
@@ -540,6 +555,7 @@ function Server:_on_exit(code)
   if was_intentional or code == 0 then
     self.status = "stopped"
     log.info("server stopped", { id = self.id, code = code })
+    self:_verify_port_released(pid_before_exit)
     event.emit("stopped", { server = self, code = code })
     -- A stop that lands before the port ever answered still has to answer the
     -- caller waiting on `start()`.
@@ -596,6 +612,75 @@ function Server:_notify_stop_hook()
   end
 end
 
+--- Remember the process tree while the parent is still alive.
+---
+--- This has to happen *before* anything is signalled. Once the launcher dies,
+--- its children are reparented to init and the parent/child link that
+--- identifies them as ours is gone forever — so a snapshot taken after the
+--- fact finds nothing, and anything that escaped the process group is
+--- unreachable.
+function Server:_snapshot_tree()
+  if not self.pid then
+    return
+  end
+  local found = process.descendants_sync(self.pid)
+  if #found > 0 then
+    self._tree = found
+  end
+end
+
+--- Signal everything recorded by the last snapshot that is still alive.
+---@param signal integer
+---@return integer signalled
+function Server:_signal_snapshot(signal)
+  local count = 0
+  for _, child in ipairs(self._tree or {}) do
+    if process.alive(child) then
+      pcall(util.uv.kill, child, signal)
+      count = count + 1
+    end
+  end
+  return count
+end
+
+--- Confirm the port is free once the process we spawned has gone.
+---
+--- The parent exiting proves nothing: `npm` routinely returns while the `node`
+--- it started keeps the socket. Silently reporting "stopped" here is how a
+--- port ends up held by a process nobody can see.
+---@param pid integer? the pid we had before the process exited
+function Server:_verify_port_released(pid)
+  local port, host = self.port, self.host
+  vim.defer_fn(function()
+    if net.is_free(host, port) then
+      return
+    end
+    -- Something still holds it. Anything recorded before we signalled is ours
+    -- to clean up, however it got away.
+    local survivors = self:_signal_snapshot(9)
+    if pid and process.alive(pid) then
+      log.warn("process survived its own exit notification", { pid = pid, port = port })
+      process.kill_tree(pid, 9)
+      survivors = survivors + 1
+    end
+    if survivors > 0 then
+      log.info("killed processes that outlived their launcher", { count = survivors, port = port })
+      return
+    end
+
+    net.port_owner(port, function(owner)
+      log.notify(
+        ("Port %d is still held%s after stopping %s. `:LiveServer reap` clears leftovers."):format(
+          port,
+          owner and (" by " .. owner) or "",
+          self:display_name()
+        ),
+        "warn"
+      )
+    end)
+  end, 400)
+end
+
 --- Terminate the process. Sends SIGTERM, then escalates to SIGKILL if the
 --- process is still alive after `grace` milliseconds.
 ---@param opts? { grace?: integer }
@@ -620,6 +705,8 @@ function Server:stop(opts, callback)
   end
 
   local job, pid = self.job, self.pid
+  -- Refresh before signalling: this is the last moment the tree is intact.
+  self:_snapshot_tree()
   pcall(vim.fn.jobstop, job)
 
   local grace = opts.grace or 2000
@@ -635,9 +722,16 @@ function Server:stop(opts, callback)
         if self._force_timer == timer then
           self._force_timer = nil
         end
+        -- Escalate against the recorded tree even if the launcher has already
+        -- gone: what holds the port is usually what outlived it.
+        local survivors = self:_signal_snapshot(9)
         if self.job == job and pid then
-          log.warn("server ignored SIGTERM, sending SIGKILL", { pid = pid })
-          pcall(util.uv.kill, pid, 9)
+          log.warn("server ignored SIGTERM, killing the process tree", { pid = pid })
+          process.kill_tree(pid, 9)
+          survivors = survivors + 1
+        end
+        if survivors > 0 then
+          self:append_log("system", "did not exit on request; killed the process tree")
         end
       end)
     end)
@@ -667,12 +761,16 @@ function Server:stop_sync(timeout)
   self._intentional = true
   self.status = "stopping"
   local job, pid = self.job, self.pid
+  self:_snapshot_tree()
   pcall(vim.fn.jobstop, job)
   local result = vim.fn.jobwait({ job }, timeout or 1500)
   if result[1] == -1 and pid then
-    pcall(util.uv.kill, pid, 9)
+    process.kill_tree_sync(pid, 9)
     vim.fn.jobwait({ job }, 300)
   end
+  -- Even a clean exit can leave a grandchild behind, and on the way out of the
+  -- editor there is no later chance to notice.
+  self:_signal_snapshot(9)
   self.job = nil
   self.pid = nil
   self.status = "stopped"

@@ -24,7 +24,9 @@ if not sandbox or not vim.startswith(state, vim.fs.normalize(sandbox)) then
 end
 
 local harness = require("harness")
-local pattern = vim.env.LIVE_SERVER_TEST_PATTERN
+-- `nvim -l tests/run.lua <pattern>` narrows the run; the environment variable
+-- does the same for callers that cannot pass arguments.
+local pattern = (_G.arg and _G.arg[1]) or vim.env.LIVE_SERVER_TEST_PATTERN
 
 local specs = vim.fn.glob(root .. "/tests/spec/*_spec.lua", false, true)
 table.sort(specs)

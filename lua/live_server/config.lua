@@ -294,6 +294,7 @@ local defaults = {
       restart = "r",
       stop_all = "X",
       logs = "l",
+      logs_all = "L",
       yank_url = "y",
       change_port = "p",
       pin_port = "P",

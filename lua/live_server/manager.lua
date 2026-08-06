@@ -158,22 +158,23 @@ function M.find_orphans(callback)
 
   local alive = {}
   for _, record in ipairs(records) do
-    -- Signal 0 only checks for existence and permission.
-    local ok = pcall(util.uv.kill, record.pid, 0)
-    if ok then
+    if require("live_server.process").alive(record.pid) then
       alive[#alive + 1] = record
     end
   end
-  if #alive == 0 or util.is_windows then
+  if #alive == 0 then
     return callback(alive)
   end
 
-  -- Confirm the PID still belongs to the command we started.
+  -- Confirm the PID still belongs to the command we started, so a recycled one
+  -- is never offered up for killing.
   local pending = #alive
   local confirmed = {}
   for _, record in ipairs(alive) do
     local output = {}
-    local started = pcall(vim.fn.jobstart, { "ps", "-p", tostring(record.pid), "-o", "command=" }, {
+    local probe = util.is_windows and { "tasklist", "/FI", ("PID eq %d"):format(record.pid), "/FO", "CSV", "/NH" }
+      or { "ps", "-p", tostring(record.pid), "-o", "command=" }
+    local started = pcall(vim.fn.jobstart, probe, {
       stdout_buffered = true,
       on_stdout = function(_, data)
         vim.list_extend(output, data or {})
@@ -181,7 +182,11 @@ function M.find_orphans(callback)
       on_exit = function()
         local line = vim.trim(table.concat(output, " "))
         local expected = record.argv0 and vim.fn.fnamemodify(record.argv0, ":t") or record.adapter
-        if line ~= "" and expected and line:find(expected, 1, true) then
+        if util.is_windows and expected then
+          -- `tasklist` reports only the image name, so match on that.
+          expected = expected:gsub("%.exe$", "")
+        end
+        if line ~= "" and expected and line:lower():find(expected:lower(), 1, true) then
           confirmed[#confirmed + 1] = record
         end
         pending = pending - 1
@@ -209,8 +214,12 @@ end
 function M.reap(orphans)
   local killed = 0
   local db = state_store()
+  local process = require("live_server.process")
   for _, record in ipairs(orphans) do
-    if pcall(util.uv.kill, record.pid, 15) then
+    if process.alive(record.pid) then
+      -- The recorded pid is the launcher; whatever holds the port is likely
+      -- below it.
+      process.kill_tree_sync(record.pid, 15)
       killed = killed + 1
       log.info("reaped orphaned server", { pid = record.pid, port = record.port })
     end
@@ -314,7 +323,16 @@ function M.start(opts, callback)
     if candidate and candidate.source ~= "root" and not opts.dir then
       log.info("targeting a sub-project", { root = base.root, dir = dir, kind = candidate.kind })
     end
-    M._start_in(opts, project, cfg, callback)
+
+    -- An app declared in the project file brings its own port and backend;
+    -- an explicit argument still outranks it.
+    local resolved = vim.deepcopy(opts)
+    if candidate then
+      resolved.port = opts.port or candidate.port
+      resolved.adapter = opts.adapter or candidate.server
+      resolved.path = opts.path or candidate.open
+    end
+    M._start_in(resolved, project, cfg, callback)
   end)
 end
 
@@ -544,7 +562,17 @@ function M.start_all(opts, callback)
         end
       end
 
-      M._start_in(vim.tbl_extend("force", opts, { dir = nil, open = false }), project, config(), function(server, err)
+      -- A declared app brings its own port and backend — that is the point of
+      -- writing them down. An explicit command-line argument still outranks it.
+      -- Built by hand rather than `tbl_extend`, which cannot clear `dir`.
+      local per_app = vim.deepcopy(opts)
+      per_app.dir = nil
+      per_app.open = false
+      per_app.port = opts.port or candidate.port
+      per_app.adapter = opts.adapter or candidate.server
+      per_app.path = opts.path or candidate.open
+
+      M._start_in(per_app, project, config(), function(server, err)
         if server then
           started[#started + 1] = server
         else
@@ -574,6 +602,31 @@ function M.stop(server, callback)
     log.notify(("%s on port %d stopped."):format(server.adapter.display, server.port), "info")
     callback()
   end)
+end
+
+--- Stop every server belonging to one repository, leaving other projects
+--- alone. With several services per repo, `stop all` is too blunt and stopping
+--- them one at a time is too tedious.
+---@param root? string defaults to the current project
+---@param opts? { quiet?: boolean }
+---@return integer stopped
+function M.stop_project(root, opts)
+  opts = opts or {}
+  root = root and util.normalize(root) or project_mod.get().root
+  local servers = M.for_project(root, { active_only = true })
+  for _, server in ipairs(servers) do
+    server:stop()
+  end
+  persist_state()
+  if #servers > 0 and not opts.quiet then
+    log.notify(
+      ("Stopped %d server%s in %s."):format(#servers, #servers == 1 and "" or "s", vim.fn.fnamemodify(root, ":t")),
+      "info"
+    )
+  elseif #servers == 0 and not opts.quiet then
+    log.notify("Nothing running in this repository.", "info")
+  end
+  return #servers
 end
 
 --- Stop everything. Returns how many servers were asked to stop.

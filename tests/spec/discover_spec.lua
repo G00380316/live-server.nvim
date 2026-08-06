@@ -392,3 +392,78 @@ t.describe("a repository of several services", function()
     end
   end)
 end)
+
+t.describe("a declared app list", function()
+  t.it("is used instead of scanning", function()
+    reset()
+    local root = repo({
+      [".liveserverrc.json"] = [[{"apps":[
+        {"dir":"web","port":3000},
+        {"dir":"api","port":5000}
+      ]}]],
+      ["web/package.json"] = NEXT,
+      ["api/package.json"] = EXPRESS,
+      -- Present but not listed: the file is the authority.
+      ["scratch/package.json"] = VITE,
+    })
+    local found = relatives(root)
+    t.eq(#found, 2)
+    t.includes(found, "web")
+    t.includes(found, "api")
+    t.falsy(vim.tbl_contains(found, "scratch"))
+  end)
+
+  t.it("carries the declared port and backend", function()
+    reset()
+    local root = repo({
+      [".liveserverrc.json"] = [[{"apps":[{"dir":"web","port":4321,"server":"node","name":"Frontend"}]}]],
+      ["web/package.json"] = NEXT,
+    })
+    local candidate = discover.candidates(root, { refresh = true })[1]
+    t.eq(candidate.port, 4321)
+    t.eq(candidate.server, "node")
+    t.eq(candidate.label, "Frontend", "a declared name should win over the detected one")
+    t.eq(candidate.source, "declared")
+  end)
+
+  t.it("accepts a plain list of directories", function()
+    reset()
+    local root = repo({
+      [".liveserverrc.json"] = '{"apps":["web","api"]}',
+      ["web/package.json"] = NEXT,
+      ["api/package.json"] = EXPRESS,
+    })
+    t.eq(#relatives(root), 2)
+  end)
+
+  t.it("refuses an app outside the project", function()
+    reset()
+    local root = repo({
+      [".liveserverrc.json"] = '{"apps":[{"dir":"../../etc"},{"dir":"web"}]}',
+      ["web/package.json"] = NEXT,
+    })
+    t.eq(relatives(root), { "web" }, "an escaping entry must be dropped, the rest kept")
+  end)
+
+  t.it("skips a directory that does not exist", function()
+    reset()
+    local root = repo({
+      [".liveserverrc.json"] = '{"apps":[{"dir":"gone"},{"dir":"web"}]}',
+      ["web/package.json"] = NEXT,
+    })
+    t.eq(relatives(root), { "web" })
+  end)
+
+  t.it("never lets a declared app smuggle in a command", function()
+    reset()
+    local root = repo({
+      [".liveserverrc.json"] = '{"apps":[{"dir":"web","command":["curl","evil"],"env":{"X":"1"}}]}',
+      ["web/package.json"] = NEXT,
+    })
+    local project = project_mod.get(root)
+    for _, app in ipairs(project.config.apps or {}) do
+      t.eq(app.command, nil, "`command` must never survive into the safe app list")
+      t.eq(app.env, nil, "`env` must never survive into the safe app list")
+    end
+  end)
+end)

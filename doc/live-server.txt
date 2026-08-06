@@ -98,8 +98,9 @@ Subcommands ~
         socket server in one keystroke, with a single consent prompt covering
         all of them. See |live-server-multiple|.
 
-:LiveServer stop [all]
-        Stop the current project's server, or every server with `all`.
+:LiveServer stop [repo|all]
+        Stop the current project's server; `repo` stops every service in this
+        repository, `all` stops everything everywhere.
 
 :LiveServer toggle [backend]
         Start the project's server, or stop it if it is already running.
@@ -176,6 +177,7 @@ Keys (all configurable through `ui.keys`) ~
     p           move it to another port
     P           pin or unpin this port for the project
     l           show its process output
+    L           show every service's output, interleaved
     y           copy the URL to the clipboard
     a           start a new server here
     A           start every app in this repository
@@ -196,6 +198,12 @@ The log view (`l`) tails output live and stops following the moment you scroll
 up, so reading a stack trace is never interrupted. Inside it: `f` toggles
 following, `t` toggles timestamps, `r` restarts, `c` clears, `y` copies
 everything, `G` jumps to the end and resumes following.
+
+`L` opens the same view across *every* running service, interleaved in the
+order things actually happened, with each line tagged and coloured by service.
+Number keys `1`-`9` narrow it to one service and back; `0` shows them all
+again. This is the view for "the frontend broke — what was the API doing at
+that moment", which reading two windows in turn cannot answer.
 
 Accessibility ~
 
@@ -506,6 +514,26 @@ normally, but no browser is opened at it: there is no page there, only a
 protocol endpoint. A server that has *both* Express and socket.io is an HTTP
 server with sockets attached and is treated as one.
 
+Writing the list down ~
+                                                       *live-server-profile*
+Rather than being discovered, the services can be declared in the project file
+and committed, so every clone starts the same set on the same ports: >json
+
+    {
+      "apps": [
+        { "dir": "web",           "port": 3000, "name": "Frontend" },
+        { "dir": "server",        "port": 5000 },
+        { "dir": "server/socket", "port": 5001 }
+      ]
+    }
+<
+A declared list is authoritative: nothing is scanned, and the ports are used
+verbatim. Each entry takes `dir` (required), `port`, `server`, `name` and
+`open`; a bare string is shorthand for `{ "dir": "..." }`. Like every other
+project-file field, an entry may not point outside the project, and it can
+never introduce a command — that still requires consent
+(|live-server-security|).
+
 Turning it off ~
 >lua
     require("live_server").setup({
@@ -703,6 +731,8 @@ Notes ~
     ls.setup(opts)                    -- optional
     ls.start(opts, callback)          -- opts: adapter, port, dir, path, expose, open
     ls.start_all(opts, callback)      -- every app in the repository
+    ls.stop_project(root?)            -- stop just this repository
+    ls.logs_all()                     -- every service's output in one window
     ls.apps()                         -- what discovery found
     ls.workdir()                      -- directory a server would run in
     ls.stop(server?)
@@ -864,6 +894,13 @@ A server outlived Neovim ~
     Only possible if Neovim was killed abnormally. `:LiveServer reap` finds
     them, verifies each PID still belongs to a server we started, and asks
     before stopping anything.
+
+A port stays held after stopping ~
+    Stopping records the process tree before signalling anything, then kills it
+    from the leaves up, because the process holding the port is usually a
+    grandchild of the launcher rather than the launcher itself. If a port is
+    still held afterwards the plugin says so and names the process rather than
+    reporting a clean stop it cannot verify.
 
 Nothing opens in a browser ~
     Over SSH that is intentional (|live-server-remote|). Otherwise set

@@ -445,3 +445,114 @@ t.describe("dashboard with several services in one repo", function()
     t.neq(a.workdir, b.workdir)
   end)
 end)
+
+t.describe("combined log view", function()
+  local logs = require("live_server.ui.logs")
+  local util = require("live_server.util")
+
+  ---@param names string[] sub-directories under one repo
+  ---@return live_server.Server[]
+  local function services(names)
+    local out = {}
+    for index, dir in ipairs(names) do
+      local project = {
+        root = "/tmp/repo",
+        name = "repo",
+        workdir = "/tmp/repo/" .. dir,
+        serve_dir = "/tmp/repo/" .. dir,
+        config = {},
+        privileged = {},
+      }
+      local server = server_mod.new({
+        adapter = adapters.get("live_server"),
+        project = project,
+        host = "127.0.0.1",
+        port = 7000 + index,
+      })
+      server.status = "running"
+      server.started_at = util.now()
+      out[#out + 1] = server
+    end
+    return out
+  end
+
+  ---@return string[]
+  local function open_and_read(servers)
+    logs.open_all(servers)
+    local lines = vim.api.nvim_buf_get_lines(vim.api.nvim_get_current_buf(), 0, -1, false)
+    logs.close()
+    return lines
+  end
+
+  t.it("interleaves services in time order", function()
+    local list = services({ "web", "api" })
+    -- Deliberately alternating, with the API logging first.
+    list[2]:append_log("stdout", "api first")
+    list[1]:append_log("stdout", "web second")
+    list[2]:append_log("stdout", "api third")
+
+    local text = table.concat(open_and_read(list), "\n")
+    local first = text:find("api first", 1, true)
+    local second = text:find("web second", 1, true)
+    local third = text:find("api third", 1, true)
+    t.truthy(first and second and third, "every line should appear")
+    t.truthy(first < second and second < third, "lines must stay in the order they happened")
+  end)
+
+  t.it("tags every line with its service", function()
+    local list = services({ "web", "api" })
+    list[1]:append_log("stdout", "from the frontend")
+    list[2]:append_log("stdout", "from the backend")
+
+    local lines = open_and_read(list)
+    for _, line in ipairs(lines) do
+      if line:find("from the frontend", 1, true) then
+        t.contains(line, "web")
+      elseif line:find("from the backend", 1, true) then
+        t.contains(line, "api")
+      end
+    end
+  end)
+
+  t.it("keeps look-alike service names distinguishable", function()
+    -- The same trap as the dashboard: a right-truncated tag collapses these
+    -- three into one string.
+    local list = services({
+      "my-faithpal_server",
+      "my-faithpal_ai_server",
+      "my-faithpal_ai_server/socket",
+    })
+    for index, server in ipairs(list) do
+      server:append_log("stdout", "line from service " .. index)
+    end
+
+    local tags = {}
+    for _, line in ipairs(open_and_read(list)) do
+      local tag = line:match("^(.-)%s*│")
+      if tag and tag ~= "" then
+        tags[vim.trim(tag)] = true
+      end
+    end
+    t.eq(vim.tbl_count(tags), 3, "expected three distinct tags, got: " .. vim.inspect(vim.tbl_keys(tags)))
+  end)
+
+  t.it("falls back to the single-server view for one service", function()
+    local list = services({ "web" })
+    list[1]:append_log("stdout", "only me")
+    local lines = open_and_read(list)
+    local text = table.concat(lines, "\n")
+    t.contains(text, "only me")
+    t.falsy(text:find("│", 1, true), "a single service needs no tag column")
+  end)
+
+  t.it("says so when nothing is running", function()
+    manager.reset()
+    local original = manager.servers
+    manager.servers = function()
+      return {}
+    end
+    t.truthy(pcall(logs.open_all))
+    t.falsy(logs.is_open(), "there is nothing to show")
+    manager.servers = original
+  end)
+end)

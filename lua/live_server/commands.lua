@@ -133,10 +133,14 @@ subcommands.start = {
 }
 
 subcommands.stop = {
-  desc = "Stop a server (or `all`)",
+  desc = "Stop a server, this `repo`, or `all` of them",
   run = function(args)
     if args.positional[1] == "all" or args.flags.all then
       manager.stop_all()
+      return
+    end
+    if args.positional[1] == "repo" or args.positional[1] == "project" then
+      manager.stop_project()
       return
     end
     pick_server(function(server)
@@ -146,7 +150,7 @@ subcommands.stop = {
     end)
   end,
   complete = function()
-    return { "all" }
+    return { "all", "repo" }
   end,
 }
 
@@ -192,13 +196,20 @@ subcommands.dashboard = {
 }
 
 subcommands.logs = {
-  desc = "Show a server's output",
-  run = function()
+  desc = "Show a server's output (`all` interleaves every service)",
+  run = function(args)
+    if args.positional[1] == "all" or args.flags.all then
+      require("live_server.ui.logs").open_all()
+      return
+    end
     pick_server(function(server)
       if server then
         require("live_server.ui.logs").open(server)
       end
     end)
+  end,
+  complete = function()
+    return { "all" }
   end,
 }
 

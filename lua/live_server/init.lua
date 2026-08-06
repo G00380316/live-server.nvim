@@ -133,6 +133,13 @@ function M.start_all(opts, callback)
   require("live_server.manager").start_all(opts, callback)
 end
 
+--- Stop every server in the current repository, leaving other projects alone.
+---@param root? string
+---@return integer stopped
+function M.stop_project(root)
+  return require("live_server.manager").stop_project(root)
+end
+
 --- Stop every managed server.
 ---@return integer stopped
 function M.stop_all()
@@ -261,6 +268,11 @@ function M.logs(server)
     return require("live_server.log").notify("No servers to show output for.", "warn")
   end
   require("live_server.ui.logs").open(server)
+end
+
+--- Show every running server's output in one window, interleaved by time.
+function M.logs_all()
+  require("live_server.ui.logs").open_all()
 end
 
 --- Statusline text for the current project. Empty when nothing is running.

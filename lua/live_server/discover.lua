@@ -28,7 +28,10 @@ local M = {}
 ---@field kind "node"|"static" what makes it servable
 ---@field label string human description, e.g. "Next.js"
 ---@field depth integer directories below the root
----@field source "root"|"workspace"|"scan" how it was found
+---@field source "root"|"workspace"|"scan"|"declared" how it was found
+---@field port integer? port declared in the project file
+---@field server string? backend declared in the project file
+---@field open string? page declared in the project file
 ---@field relative string path relative to the root, "" for the root itself
 
 ---@return live_server.Config
@@ -271,6 +274,14 @@ function M.candidates(root, opts)
     found[#found + 1] = at_root
   end
 
+  -- A project file that lists its services is the most authoritative answer
+  -- there is: someone wrote it down on purpose.
+  local declared = M.declared(root)
+  if #declared > 0 then
+    cache[root] = { candidates = declared, at = util.now() }
+    return declared
+  end
+
   if cfg.discover.enabled and not (at_root and at_root.kind == "node") then
     local globs = M.workspace_globs(root)
     if #globs > 0 then
@@ -304,6 +315,46 @@ function M.candidates(root, opts)
   end)
 
   cache[root] = { candidates = found, at = util.now() }
+  return found
+end
+
+--- Services declared in the project file, if any.
+---
+--- Checked into the repository, so every clone starts the same set on the same
+--- ports without anyone configuring anything.
+---@param root string
+---@return live_server.Candidate[]
+function M.declared(root)
+  local ok, project = pcall(require("live_server.project").get, root)
+  if not ok or type(project) ~= "table" then
+    return {}
+  end
+  local apps = project.config and project.config.apps
+  if type(apps) ~= "table" then
+    return {}
+  end
+
+  local found = {}
+  for _, entry in ipairs(apps) do
+    local dir = util.is_absolute(entry.dir) and util.normalize(entry.dir) or util.normalize(root .. "/" .. entry.dir)
+    -- Same rule as `root`: a project file may not point outside its project.
+    if not util.is_within(root, dir) then
+      log.notify(("%s lists an app outside the project (%s); ignored."):format("the project file", entry.dir), "warn")
+    elseif not util.is_dir(dir) then
+      log.warn("declared app directory does not exist", { dir = dir })
+    else
+      local candidate = M.inspect(dir) or { dir = dir, kind = "static", label = "declared" }
+      local relative = util.relative(root, dir) or ""
+      candidate.depth = relative == "" and 0 or select(2, relative:gsub("/", "")) + 1
+      candidate.source = "declared"
+      candidate.relative = relative
+      candidate.label = entry.name or candidate.label
+      candidate.port = entry.port
+      candidate.server = entry.server
+      candidate.open = entry.open
+      found[#found + 1] = candidate
+    end
+  end
   return found
 end
 

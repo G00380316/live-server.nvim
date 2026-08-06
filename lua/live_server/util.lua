@@ -299,48 +299,87 @@ local realpath_cache_size = 0
 ---@param path string
 ---@return string
 local function strip_trailing(path)
-    if #path > 1 then
-        return (path:gsub("/+$", ""))
+    -- A drive root must remain `C:/`; stripping it to `C:` changes it from an
+    -- absolute path into a drive-relative path on Windows.
+    if path == "/" or path:match("^%a:/$") then
+        return path
     end
-    return path
+    return (path:gsub("/+$", ""))
 end
 
---- Resolve an existing path to its canonical target.
+--- Apply the platform-independent spelling used by every path returned from
+--- this module.
+---@param path string
+---@return string
+local function path_shape(path)
+    local shaped = vim.fs.normalize(path):gsub("\\", "/")
+    if M.is_windows then
+        shaped = shaped:gsub("^([a-z]):", function(drive)
+            return drive:upper() .. ":"
+        end)
+    end
+    return strip_trailing(shaped)
+end
+
+--- Make a path absolute without asking the filesystem to resolve it.
 ---
---- On Windows, libuv may report a successful `fs_realpath` while preserving
---- the spelling of a directory symlink or junction. `resolve()` is therefore
---- also consulted and preferred when it produces a different existing path.
+--- A leading slash on Windows is rooted on the current drive. `vim.fs.normalize`
+--- intentionally preserves that spelling, so convert it explicitly before
+--- realpath lookup; otherwise `/tmp/x` and `D:/tmp/x` can describe the same
+--- place while comparing as different strings.
+---@param path string
+---@return string
+local function lexical_absolute(path)
+    local normalized = path_shape(path)
+
+    if M.is_windows and normalized:match("^/[^/]") then
+        local cwd = path_shape(vim.fn.getcwd())
+        local drive = cwd:match("^(%a:)")
+        if drive then
+            normalized = drive .. normalized
+        else
+            normalized = vim.fn.fnamemodify(normalized, ":p")
+        end
+    elseif not M.is_absolute(normalized) then
+        normalized = vim.fn.fnamemodify(normalized, ":p")
+    end
+
+    return path_shape(normalized)
+end
+
+--- Canonical spelling of an existing path.
+---
+--- libuv uses GetFinalPathNameByHandleW on Windows, which is the resolver that
+--- expands directory symlinks/junctions and normally expands 8.3 components.
+--- Do not mix its result with `vim.fn.resolve()`: on Windows resolve() is for
+--- shortcut files rather than general filesystem symlinks, and combining the
+--- two APIs can reintroduce short-name/long-name mismatches.
 ---@param path string
 ---@return string?
 local function existing_realpath(path)
-    local uv_real = M.uv.fs_realpath(path)
-    local vim_real = vim.fn.resolve(path)
-
-    if vim_real and vim_real ~= "" then
-        vim_real = vim.fs.normalize(vim_real)
-        local verified = M.uv.fs_realpath(vim_real)
-        if verified then
-            vim_real = verified
-        end
-    else
-        vim_real = nil
+    local resolved = M.uv.fs_realpath(path)
+    if not resolved or resolved == "" then
+        return nil
     end
+    return path_shape(resolved)
+end
 
-    if vim_real and vim.fs.normalize(vim_real) ~= vim.fs.normalize(path) then
-        return vim_real
-    end
-    return uv_real or vim_real
+---@param path string
+---@return string
+local function realpath_cache_key(path)
+    -- Windows paths are case-insensitive. Folding only the cache key keeps the
+    -- returned spelling readable while making differently-cased inputs reuse one
+    -- canonical result.
+    return M.is_windows and path:lower() or path
 end
 
 --- Canonical form of a filesystem path: `~` expanded, absolute, no trailing
---- separator, forward slashes, and **symlinks resolved**.
+--- separator, forward slashes, an uppercase Windows drive letter, and
+--- **symlinks resolved**.
 ---
---- Resolving symlinks is not cosmetic. Neovim reports buffer names in resolved
---- form, so a project reached through a symlink — `/tmp` on macOS, a work
---- directory linked onto another volume, a dotfiles checkout — would otherwise
---- produce two spellings of the same directory that never compare equal. That
---- breaks page mapping, port pin lookups, and the containment check that stops
---- a project file from serving something outside its own tree.
+--- Missing paths are canonicalised through their deepest existing ancestor.
+--- This is required for paths below a symlink and for test/project directories
+--- that are normalised before they are created.
 ---@param path string
 ---@return string
 function M.normalize(path)
@@ -348,55 +387,62 @@ function M.normalize(path)
         return ""
     end
 
-    -- vim.fs.normalize expands `~` and collapses `..`; it never globs, which
-    -- matters because paths can legitimately contain `*` or `[`.
-    local normalized = vim.fs.normalize(path)
-    if not M.is_absolute(normalized) then
-        normalized = vim.fs.normalize(vim.fn.fnamemodify(normalized, ":p"))
-    end
-    normalized = strip_trailing(normalized)
+    -- `vim.fs.normalize` never globs, so literal `*` and `[` remain valid path
+    -- characters. `lexical_absolute` also converts Windows root-relative paths
+    -- such as `/tmp/app` to the current drive before filesystem lookup.
+    local normalized = lexical_absolute(tostring(path))
+    local key = realpath_cache_key(normalized)
 
-    local cached = realpath_cache[normalized]
+    local cached = realpath_cache[key]
     if cached then
         return cached
     end
 
     local resolved = existing_realpath(normalized)
     if not resolved then
-        -- The path may not exist yet — a port pin for a directory about to be
-        -- created, a page not yet written, a sub-project referenced before
-        -- checkout. Walk up to the deepest ancestor that *does* exist and
-        -- re-append the rest.
-        --
-        -- Resolving only the immediate parent is not enough: with `/tmp` a symlink,
-        -- `/tmp/repo` would canonicalise to `/private/tmp/repo` while
-        -- `/tmp/repo/app` stayed as written, and the two would no longer compare as
-        -- parent and child. Every containment check downstream depends on this
-        -- being consistent at any depth.
+        -- Walk to the deepest ancestor that exists, resolve that one canonical
+        -- spelling, then append the missing suffix. Resolving only the immediate
+        -- parent is insufficient when several descendants do not exist yet.
         local segments = {}
         local current = normalized
+
         while true do
             local parent = vim.fs.dirname(current)
             if not parent or parent == current then
                 break
             end
+
             table.insert(segments, 1, vim.fs.basename(current))
+
             local parent_real = existing_realpath(parent)
             if parent_real then
-                resolved = strip_trailing(vim.fs.normalize(parent_real)) .. "/" .. table.concat(segments, "/")
+                resolved = parent_real
+                if #segments > 0 then
+                    resolved = resolved .. "/" .. table.concat(segments, "/")
+                end
                 break
             end
+
             current = parent
         end
     end
 
-    resolved = strip_trailing(vim.fs.normalize(resolved or normalized))
+    resolved = path_shape(resolved or normalized)
 
     -- Bounded so a long session that touches many paths cannot leak memory.
     if realpath_cache_size < 1024 then
-        realpath_cache[normalized] = resolved
+        realpath_cache[key] = resolved
         realpath_cache_size = realpath_cache_size + 1
+
+        -- Cache the canonical spelling too. A later caller may arrive through the
+        -- long name after an earlier caller used an 8.3 or symlink spelling.
+        local resolved_key = realpath_cache_key(resolved)
+        if resolved_key ~= key and realpath_cache_size < 1024 then
+            realpath_cache[resolved_key] = resolved
+            realpath_cache_size = realpath_cache_size + 1
+        end
     end
+
     return resolved
 end
 

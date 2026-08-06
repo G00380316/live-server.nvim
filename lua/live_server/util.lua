@@ -16,17 +16,17 @@ M.is_windows = vim.fn.has("win32") == 1 or vim.fn.has("win64") == 1
 M.is_mac = M.uv.os_uname().sysname == "Darwin"
 ---@type boolean
 M.is_wsl = (function()
-    if M.is_windows then
-        return false
-    end
-    local release = M.uv.os_uname().release or ""
-    return release:lower():find("microsoft") ~= nil
+  if M.is_windows then
+    return false
+  end
+  local release = M.uv.os_uname().release or ""
+  return release:lower():find("microsoft") ~= nil
 end)()
 
 --- Milliseconds since an arbitrary fixed point. Monotonic: safe for durations.
 ---@return integer
 function M.now()
-    return math.floor(M.uv.now())
+  return math.floor(M.uv.now())
 end
 
 --- Clamp `value` into the inclusive range [`lo`, `hi`].
@@ -35,41 +35,41 @@ end
 ---@param hi number
 ---@return number
 function M.clamp(value, lo, hi)
-    if value < lo then
-        return lo
-    elseif value > hi then
-        return hi
-    end
-    return value
+  if value < lo then
+    return lo
+  elseif value > hi then
+    return hi
+  end
+  return value
 end
 
 --- Format a millisecond duration as a compact human string ("3s", "4m", "2h").
 ---@param ms integer
 ---@return string
 function M.duration(ms)
-    if ms < 1000 then
-        return "0s"
-    end
-    local seconds = math.floor(ms / 1000)
-    if seconds < 60 then
-        return seconds .. "s"
-    end
-    local minutes = math.floor(seconds / 60)
-    if minutes < 60 then
-        return minutes .. "m"
-    end
-    local hours = math.floor(minutes / 60)
-    if hours < 24 then
-        return hours .. "h" .. (minutes % 60 > 0 and (minutes % 60) .. "m" or "")
-    end
-    return math.floor(hours / 24) .. "d" .. (hours % 24 > 0 and (hours % 24) .. "h" or "")
+  if ms < 1000 then
+    return "0s"
+  end
+  local seconds = math.floor(ms / 1000)
+  if seconds < 60 then
+    return seconds .. "s"
+  end
+  local minutes = math.floor(seconds / 60)
+  if minutes < 60 then
+    return minutes .. "m"
+  end
+  local hours = math.floor(minutes / 60)
+  if hours < 24 then
+    return hours .. "h" .. (minutes % 60 > 0 and (minutes % 60) .. "m" or "")
+  end
+  return math.floor(hours / 24) .. "d" .. (hours % 24 > 0 and (hours % 24) .. "h" or "")
 end
 
 --- Display width of `str`, accounting for multi-cell characters.
 ---@param str string
 ---@return integer
 function M.width(str)
-    return vim.fn.strdisplaywidth(str)
+  return vim.fn.strdisplaywidth(str)
 end
 
 --- Pad `str` with spaces to `width` display cells.
@@ -78,15 +78,15 @@ end
 ---@param align? "left"|"right"
 ---@return string
 function M.pad(str, width, align)
-    local len = M.width(str)
-    if len >= width then
-        return str
-    end
-    local fill = string.rep(" ", width - len)
-    if align == "right" then
-        return fill .. str
-    end
-    return str .. fill
+  local len = M.width(str)
+  if len >= width then
+    return str
+  end
+  local fill = string.rep(" ", width - len)
+  if align == "right" then
+    return fill .. str
+  end
+  return str .. fill
 end
 
 --- Truncate `str` to `width` display cells, appending an ellipsis when cut.
@@ -94,20 +94,20 @@ end
 ---@param width integer
 ---@return string
 function M.truncate(str, width)
-    if width <= 0 then
-        return ""
-    end
-    if M.width(str) <= width then
-        return str
-    end
-    if width <= 1 then
-        return "…"
-    end
-    local out = str
-    while M.width(out) > width - 1 and #out > 0 do
-        out = out:sub(1, -2)
-    end
-    return out .. "…"
+  if width <= 0 then
+    return ""
+  end
+  if M.width(str) <= width then
+    return str
+  end
+  if width <= 1 then
+    return "…"
+  end
+  local out = str
+  while M.width(out) > width - 1 and #out > 0 do
+    out = out:sub(1, -2)
+  end
+  return out .. "…"
 end
 
 --- Truncate from the left, keeping the end of the string. For paths the tail is
@@ -116,20 +116,20 @@ end
 ---@param width integer
 ---@return string
 function M.truncate_left(str, width)
-    if width <= 0 then
-        return ""
-    end
-    if M.width(str) <= width then
-        return str
-    end
-    if width <= 1 then
-        return "…"
-    end
-    local out = str
-    while M.width(out) > width - 1 and #out > 0 do
-        out = out:sub(2)
-    end
-    return "…" .. out
+  if width <= 0 then
+    return ""
+  end
+  if M.width(str) <= width then
+    return str
+  end
+  if width <= 1 then
+    return "…"
+  end
+  local out = str
+  while M.width(out) > width - 1 and #out > 0 do
+    out = out:sub(2)
+  end
+  return "…" .. out
 end
 
 --- Shorten a path for display: `~` for home, then drop leading components
@@ -138,37 +138,37 @@ end
 ---@param width integer
 ---@return string
 function M.shorten_path(path, width)
-    local display = vim.fn.fnamemodify(path, ":~")
-    if M.width(display) <= width then
-        return display
-    end
+  local display = vim.fn.fnamemodify(path, ":~")
+  if M.width(display) <= width then
+    return display
+  end
 
-    -- Prefer cutting on a separator so the result is still a readable path.
-    local parts = vim.split(display, "/", { plain = true, trimempty = true })
-    for index = 2, #parts do
-        local candidate = "…/" .. table.concat(parts, "/", index)
-        if M.width(candidate) <= width then
-            return candidate
-        end
+  -- Prefer cutting on a separator so the result is still a readable path.
+  local parts = vim.split(display, "/", { plain = true, trimempty = true })
+  for index = 2, #parts do
+    local candidate = "…/" .. table.concat(parts, "/", index)
+    if M.width(candidate) <= width then
+      return candidate
     end
-    return M.truncate_left(display, width)
+  end
+  return M.truncate_left(display, width)
 end
 
 --- Strip ANSI escape sequences and carriage returns from process output.
 ---@param str string
 ---@return string
 function M.strip_ansi(str)
-    local out = str:gsub("\27%[[%d;?]*[A-Za-z]", "")
-    out = out:gsub("\27%][^\7\27]*[\7\27]?", "")
-    out = out:gsub("\r", "")
-    return out
+  local out = str:gsub("\27%[[%d;?]*[A-Za-z]", "")
+  out = out:gsub("\27%][^\7\27]*[\7\27]?", "")
+  out = out:gsub("\r", "")
+  return out
 end
 
 --- True when `name` resolves to an executable on `$PATH`.
 ---@param name string
 ---@return boolean
 function M.executable(name)
-    return vim.fn.executable(name) == 1
+  return vim.fn.executable(name) == 1
 end
 
 --- Stable short hash of a string. Used for deterministic port assignment and
@@ -176,25 +176,25 @@ end
 ---@param str string
 ---@return integer
 function M.hash(str)
-    -- FNV-1a, 32-bit, implemented with 16-bit halves so it stays exact in the
-    -- 53-bit float mantissa LuaJIT uses for numbers.
-    local hi, lo = 0x811c, 0x9dc5
-    for i = 1, #str do
-        lo = bit.bxor(lo, str:byte(i))
-        -- multiply by the FNV prime 0x01000193 using 16-bit limbs
-        local lo_mul = lo * 0x0193
-        local hi_mul = hi * 0x0193 + lo * 0x0100 + math.floor(lo_mul / 0x10000)
-        lo = lo_mul % 0x10000
-        hi = hi_mul % 0x10000
-    end
-    return hi * 0x10000 + lo
+  -- FNV-1a, 32-bit, implemented with 16-bit halves so it stays exact in the
+  -- 53-bit float mantissa LuaJIT uses for numbers.
+  local hi, lo = 0x811c, 0x9dc5
+  for i = 1, #str do
+    lo = bit.bxor(lo, str:byte(i))
+    -- multiply by the FNV prime 0x01000193 using 16-bit limbs
+    local lo_mul = lo * 0x0193
+    local hi_mul = hi * 0x0193 + lo * 0x0100 + math.floor(lo_mul / 0x10000)
+    lo = lo_mul % 0x10000
+    hi = hi_mul % 0x10000
+  end
+  return hi * 0x10000 + lo
 end
 
 --- SHA-256 of a string, used for content-addressed trust records.
 ---@param str string
 ---@return string
 function M.sha256(str)
-    return vim.fn.sha256(str)
+  return vim.fn.sha256(str)
 end
 
 --- Return a debounced wrapper: `fn` runs `ms` after the last call.
@@ -203,39 +203,39 @@ end
 ---@param ms integer
 ---@return F
 function M.debounce(fn, ms)
-    local timer = nil
-    return function(...)
-        local args = { ... }
-        if timer then
-            timer:stop()
-            timer:close()
-            timer = nil
-        end
-        timer = M.uv.new_timer()
-        if not timer then
-            return fn(unpack(args))
-        end
-        timer:start(ms, 0, function()
-            if timer then
-                timer:stop()
-                timer:close()
-                timer = nil
-            end
-            vim.schedule(function()
-                fn(unpack(args))
-            end)
-        end)
+  local timer = nil
+  return function(...)
+    local args = { ... }
+    if timer then
+      timer:stop()
+      timer:close()
+      timer = nil
     end
+    timer = M.uv.new_timer()
+    if not timer then
+      return fn(unpack(args))
+    end
+    timer:start(ms, 0, function()
+      if timer then
+        timer:stop()
+        timer:close()
+        timer = nil
+      end
+      vim.schedule(function()
+        fn(unpack(args))
+      end)
+    end)
+  end
 end
 
 --- Run `fn` on the main loop. No-op wrapper when already scheduled work is safe.
 ---@param fn function
 function M.schedule(fn)
-    if vim.in_fast_event() then
-        vim.schedule(fn)
-    else
-        fn()
-    end
+  if vim.in_fast_event() then
+    vim.schedule(fn)
+  else
+    fn()
+  end
 end
 
 --- Fixed-capacity ring buffer. Push is O(1) and memory never grows past `cap`.
@@ -250,45 +250,45 @@ Ring.__index = Ring
 ---@param cap integer
 ---@return live_server.Ring
 function M.ring(cap)
-    return setmetatable({ items = {}, cap = math.max(1, cap), head = 0, len = 0 }, Ring)
+  return setmetatable({ items = {}, cap = math.max(1, cap), head = 0, len = 0 }, Ring)
 end
 
 ---@param item any
 function Ring:push(item)
-    self.head = (self.head % self.cap) + 1
-    self.items[self.head] = item
-    if self.len < self.cap then
-        self.len = self.len + 1
-    end
+  self.head = (self.head % self.cap) + 1
+  self.items[self.head] = item
+  if self.len < self.cap then
+    self.len = self.len + 1
+  end
 end
 
 --- Items in insertion order, oldest first.
 ---@param limit? integer only return the newest `limit` items
 ---@return any[]
 function Ring:list(limit)
-    local out = {}
-    local count = self.len
-    if limit and limit < count then
-        count = limit
-    end
-    -- index of the oldest item we want to emit
-    local start = self.head - count + 1
-    for offset = 0, count - 1 do
-        local idx = ((start + offset - 1) % self.cap) + 1
-        out[#out + 1] = self.items[idx]
-    end
-    return out
+  local out = {}
+  local count = self.len
+  if limit and limit < count then
+    count = limit
+  end
+  -- index of the oldest item we want to emit
+  local start = self.head - count + 1
+  for offset = 0, count - 1 do
+    local idx = ((start + offset - 1) % self.cap) + 1
+    out[#out + 1] = self.items[idx]
+  end
+  return out
 end
 
 ---@return integer
 function Ring:size()
-    return self.len
+  return self.len
 end
 
 function Ring:clear()
-    self.items = {}
-    self.head = 0
-    self.len = 0
+  self.items = {}
+  self.head = 0
+  self.len = 0
 end
 
 ---@type table<string, string>
@@ -299,12 +299,12 @@ local realpath_cache_size = 0
 ---@param path string
 ---@return string
 local function strip_trailing(path)
-    -- A drive root must remain `C:/`; stripping it to `C:` changes it from an
-    -- absolute path into a drive-relative path on Windows.
-    if path == "/" or path:match("^%a:/$") then
-        return path
-    end
-    return (path:gsub("/+$", ""))
+  -- A drive root must remain `C:/`; stripping it to `C:` changes it from an
+  -- absolute path into a drive-relative path on Windows.
+  if path == "/" or path:match("^%a:/$") then
+    return path
+  end
+  return (path:gsub("/+$", ""))
 end
 
 --- Apply the platform-independent spelling used by every path returned from
@@ -312,13 +312,13 @@ end
 ---@param path string
 ---@return string
 local function path_shape(path)
-    local shaped = vim.fs.normalize(path):gsub("\\", "/")
-    if M.is_windows then
-        shaped = shaped:gsub("^([a-z]):", function(drive)
-            return drive:upper() .. ":"
-        end)
-    end
-    return strip_trailing(shaped)
+  local shaped = vim.fs.normalize(path):gsub("\\", "/")
+  if M.is_windows then
+    shaped = shaped:gsub("^([a-z]):", function(drive)
+      return drive:upper() .. ":"
+    end)
+  end
+  return strip_trailing(shaped)
 end
 
 --- Make a path absolute without asking the filesystem to resolve it.
@@ -330,21 +330,21 @@ end
 ---@param path string
 ---@return string
 local function lexical_absolute(path)
-    local normalized = path_shape(path)
+  local normalized = path_shape(path)
 
-    if M.is_windows and normalized:match("^/[^/]") then
-        local cwd = path_shape(vim.fn.getcwd())
-        local drive = cwd:match("^(%a:)")
-        if drive then
-            normalized = drive .. normalized
-        else
-            normalized = vim.fn.fnamemodify(normalized, ":p")
-        end
-    elseif not M.is_absolute(normalized) then
-        normalized = vim.fn.fnamemodify(normalized, ":p")
+  if M.is_windows and normalized:match("^/[^/]") then
+    local cwd = path_shape(vim.fn.getcwd())
+    local drive = cwd:match("^(%a:)")
+    if drive then
+      normalized = drive .. normalized
+    else
+      normalized = vim.fn.fnamemodify(normalized, ":p")
     end
+  elseif not M.is_absolute(normalized) then
+    normalized = vim.fn.fnamemodify(normalized, ":p")
+  end
 
-    return path_shape(normalized)
+  return path_shape(normalized)
 end
 
 --- Canonical spelling of an existing path.
@@ -357,20 +357,20 @@ end
 ---@param path string
 ---@return string?
 local function existing_realpath(path)
-    local resolved = M.uv.fs_realpath(path)
-    if not resolved or resolved == "" then
-        return nil
-    end
-    return path_shape(resolved)
+  local resolved = M.uv.fs_realpath(path)
+  if not resolved or resolved == "" then
+    return nil
+  end
+  return path_shape(resolved)
 end
 
 ---@param path string
 ---@return string
 local function realpath_cache_key(path)
-    -- Windows paths are case-insensitive. Folding only the cache key keeps the
-    -- returned spelling readable while making differently-cased inputs reuse one
-    -- canonical result.
-    return M.is_windows and path:lower() or path
+  -- Windows paths are case-insensitive. Folding only the cache key keeps the
+  -- returned spelling readable while making differently-cased inputs reuse one
+  -- canonical result.
+  return M.is_windows and path:lower() or path
 end
 
 --- Canonical form of a filesystem path: `~` expanded, absolute, no trailing
@@ -383,83 +383,83 @@ end
 ---@param path string
 ---@return string
 function M.normalize(path)
-    if path == nil or path == "" then
-        return ""
-    end
+  if path == nil or path == "" then
+    return ""
+  end
 
-    -- `vim.fs.normalize` never globs, so literal `*` and `[` remain valid path
-    -- characters. `lexical_absolute` also converts Windows root-relative paths
-    -- such as `/tmp/app` to the current drive before filesystem lookup.
-    local normalized = lexical_absolute(tostring(path))
-    local key = realpath_cache_key(normalized)
+  -- `vim.fs.normalize` never globs, so literal `*` and `[` remain valid path
+  -- characters. `lexical_absolute` also converts Windows root-relative paths
+  -- such as `/tmp/app` to the current drive before filesystem lookup.
+  local normalized = lexical_absolute(tostring(path))
+  local key = realpath_cache_key(normalized)
 
-    local cached = realpath_cache[key]
-    if cached then
-        return cached
-    end
+  local cached = realpath_cache[key]
+  if cached then
+    return cached
+  end
 
-    local resolved = existing_realpath(normalized)
-    if not resolved then
-        -- Walk to the deepest ancestor that exists, resolve that one canonical
-        -- spelling, then append the missing suffix. Resolving only the immediate
-        -- parent is insufficient when several descendants do not exist yet.
-        local segments = {}
-        local current = normalized
+  local resolved = existing_realpath(normalized)
+  if not resolved then
+    -- Walk to the deepest ancestor that exists, resolve that one canonical
+    -- spelling, then append the missing suffix. Resolving only the immediate
+    -- parent is insufficient when several descendants do not exist yet.
+    local segments = {}
+    local current = normalized
 
-        while true do
-            local parent = vim.fs.dirname(current)
-            if not parent or parent == current then
-                break
-            end
+    while true do
+      local parent = vim.fs.dirname(current)
+      if not parent or parent == current then
+        break
+      end
 
-            table.insert(segments, 1, vim.fs.basename(current))
+      table.insert(segments, 1, vim.fs.basename(current))
 
-            local parent_real = existing_realpath(parent)
-            if parent_real then
-                resolved = parent_real
-                if #segments > 0 then
-                    resolved = resolved .. "/" .. table.concat(segments, "/")
-                end
-                break
-            end
-
-            current = parent
+      local parent_real = existing_realpath(parent)
+      if parent_real then
+        resolved = parent_real
+        if #segments > 0 then
+          resolved = resolved .. "/" .. table.concat(segments, "/")
         end
+        break
+      end
+
+      current = parent
     end
+  end
 
-    resolved = path_shape(resolved or normalized)
+  resolved = path_shape(resolved or normalized)
 
-    -- Bounded so a long session that touches many paths cannot leak memory.
-    if realpath_cache_size < 1024 then
-        realpath_cache[key] = resolved
-        realpath_cache_size = realpath_cache_size + 1
+  -- Bounded so a long session that touches many paths cannot leak memory.
+  if realpath_cache_size < 1024 then
+    realpath_cache[key] = resolved
+    realpath_cache_size = realpath_cache_size + 1
 
-        -- Cache the canonical spelling too. A later caller may arrive through the
-        -- long name after an earlier caller used an 8.3 or symlink spelling.
-        local resolved_key = realpath_cache_key(resolved)
-        if resolved_key ~= key and realpath_cache_size < 1024 then
-            realpath_cache[resolved_key] = resolved
-            realpath_cache_size = realpath_cache_size + 1
-        end
+    -- Cache the canonical spelling too. A later caller may arrive through the
+    -- long name after an earlier caller used an 8.3 or symlink spelling.
+    local resolved_key = realpath_cache_key(resolved)
+    if resolved_key ~= key and realpath_cache_size < 1024 then
+      realpath_cache[resolved_key] = resolved
+      realpath_cache_size = realpath_cache_size + 1
     end
+  end
 
-    return resolved
+  return resolved
 end
 
 --- Forget cached symlink resolutions. Only needed if a symlink is repointed
 --- while Neovim is running.
 function M.invalidate_paths()
-    realpath_cache = {}
-    realpath_cache_size = 0
+  realpath_cache = {}
+  realpath_cache_size = 0
 end
 
 ---@param path string
 ---@return boolean
 function M.is_absolute(path)
-    if M.is_windows then
-        return path:match("^%a:[/\\]") ~= nil or path:match("^[/\\][/\\]") ~= nil
-    end
-    return path:sub(1, 1) == "/"
+  if M.is_windows then
+    return path:match("^%a:[/\\]") ~= nil or path:match("^[/\\][/\\]") ~= nil
+  end
+  return path:sub(1, 1) == "/"
 end
 
 --- True when `child` is `parent` or lives inside it. Both are normalised first,
@@ -468,14 +468,14 @@ end
 ---@param child string
 ---@return boolean
 function M.is_within(parent, child)
-    local p, c = M.normalize(parent), M.normalize(child)
-    if p == "" or c == "" then
-        return false
-    end
-    if c == p then
-        return true
-    end
-    return c:sub(1, #p + 1) == p .. "/"
+  local p, c = M.normalize(parent), M.normalize(child)
+  if p == "" or c == "" then
+    return false
+  end
+  if c == p then
+    return true
+  end
+  return c:sub(1, #p + 1) == p .. "/"
 end
 
 --- Path of `path` relative to `base`, or nil when it is not contained.
@@ -483,28 +483,28 @@ end
 ---@param path string
 ---@return string?
 function M.relative(base, path)
-    local b, p = M.normalize(base), M.normalize(path)
-    if not M.is_within(b, p) then
-        return nil
-    end
-    if b == p then
-        return ""
-    end
-    return p:sub(#b + 2)
+  local b, p = M.normalize(base), M.normalize(path)
+  if not M.is_within(b, p) then
+    return nil
+  end
+  if b == p then
+    return ""
+  end
+  return p:sub(#b + 2)
 end
 
 ---@param path string
 ---@return boolean
 function M.is_dir(path)
-    local stat = M.uv.fs_stat(path)
-    return stat ~= nil and stat.type == "directory"
+  local stat = M.uv.fs_stat(path)
+  return stat ~= nil and stat.type == "directory"
 end
 
 ---@param path string
 ---@return boolean
 function M.is_file(path)
-    local stat = M.uv.fs_stat(path)
-    return stat ~= nil and stat.type == "file"
+  local stat = M.uv.fs_stat(path)
+  return stat ~= nil and stat.type == "file"
 end
 
 --- Create `path` and any missing parents. Returns false plus a message on error.
@@ -512,29 +512,29 @@ end
 ---@return boolean ok
 ---@return string? err
 function M.mkdirp(path)
-    local ok, err = pcall(vim.fn.mkdir, path, "p")
-    if not ok then
-        return false, tostring(err)
-    end
-    return true, nil
+  local ok, err = pcall(vim.fn.mkdir, path, "p")
+  if not ok then
+    return false, tostring(err)
+  end
+  return true, nil
 end
 
 --- Read a whole file. Returns nil when it does not exist or cannot be read.
 ---@param path string
 ---@return string?
 function M.read_file(path)
-    local fd = M.uv.fs_open(path, "r", 438)
-    if not fd then
-        return nil
-    end
-    local stat = M.uv.fs_fstat(fd)
-    if not stat then
-        M.uv.fs_close(fd)
-        return nil
-    end
-    local data = M.uv.fs_read(fd, stat.size, 0)
+  local fd = M.uv.fs_open(path, "r", 438)
+  if not fd then
+    return nil
+  end
+  local stat = M.uv.fs_fstat(fd)
+  if not stat then
     M.uv.fs_close(fd)
-    return data
+    return nil
+  end
+  local data = M.uv.fs_read(fd, stat.size, 0)
+  M.uv.fs_close(fd)
+  return data
 end
 
 --- Write `data` to `path` atomically (write to a temp file, then rename) so a
@@ -544,30 +544,30 @@ end
 ---@return boolean ok
 ---@return string? err
 function M.write_file(path, data)
-    local dir = vim.fs.dirname(path)
-    if dir and not M.is_dir(dir) then
-        local ok, err = M.mkdirp(dir)
-        if not ok then
-            return false, err
-        end
-    end
-    local tmp = path .. ".tmp." .. tostring(M.uv.getpid())
-    local fd, open_err = M.uv.fs_open(tmp, "w", 384) -- 0600: state may name private paths
-    if not fd then
-        return false, tostring(open_err)
-    end
-    local ok, write_err = pcall(M.uv.fs_write, fd, data, 0)
-    M.uv.fs_close(fd)
+  local dir = vim.fs.dirname(path)
+  if dir and not M.is_dir(dir) then
+    local ok, err = M.mkdirp(dir)
     if not ok then
-        pcall(M.uv.fs_unlink, tmp)
-        return false, tostring(write_err)
+      return false, err
     end
-    local renamed, rename_err = M.uv.fs_rename(tmp, path)
-    if not renamed then
-        pcall(M.uv.fs_unlink, tmp)
-        return false, tostring(rename_err)
-    end
-    return true, nil
+  end
+  local tmp = path .. ".tmp." .. tostring(M.uv.getpid())
+  local fd, open_err = M.uv.fs_open(tmp, "w", 384) -- 0600: state may name private paths
+  if not fd then
+    return false, tostring(open_err)
+  end
+  local ok, write_err = pcall(M.uv.fs_write, fd, data, 0)
+  M.uv.fs_close(fd)
+  if not ok then
+    pcall(M.uv.fs_unlink, tmp)
+    return false, tostring(write_err)
+  end
+  local renamed, rename_err = M.uv.fs_rename(tmp, path)
+  if not renamed then
+    pcall(M.uv.fs_unlink, tmp)
+    return false, tostring(rename_err)
+  end
+  return true, nil
 end
 
 --- Decode JSON, never throwing. Returns nil plus a message on malformed input.
@@ -575,14 +575,14 @@ end
 ---@return any?
 ---@return string? err
 function M.json_decode(str)
-    if str == nil or vim.trim(str) == "" then
-        return nil, "empty"
-    end
-    local ok, result = pcall(vim.json.decode, str, { luanil = { object = true, array = true } })
-    if not ok then
-        return nil, tostring(result)
-    end
-    return result, nil
+  if str == nil or vim.trim(str) == "" then
+    return nil, "empty"
+  end
+  local ok, result = pcall(vim.json.decode, str, { luanil = { object = true, array = true } })
+  if not ok then
+    return nil, tostring(result)
+  end
+  return result, nil
 end
 
 --- Encode to JSON. Returns nil plus a message when the value is not encodable.
@@ -590,36 +590,36 @@ end
 ---@return string?
 ---@return string? err
 function M.json_encode(value)
-    local ok, result = pcall(vim.json.encode, value)
-    if not ok then
-        return nil, tostring(result)
-    end
-    return result, nil
+  local ok, result = pcall(vim.json.encode, value)
+  if not ok then
+    return nil, tostring(result)
+  end
+  return result, nil
 end
 
 --- Sorted keys of a table, for deterministic iteration order in output.
 ---@param tbl table
 ---@return string[]
 function M.sorted_keys(tbl)
-    local keys = {}
-    for key in pairs(tbl) do
-        keys[#keys + 1] = key
-    end
-    table.sort(keys, function(a, b)
-        return tostring(a) < tostring(b)
-    end)
-    return keys
+  local keys = {}
+  for key in pairs(tbl) do
+    keys[#keys + 1] = key
+  end
+  table.sort(keys, function(a, b)
+    return tostring(a) < tostring(b)
+  end)
+  return keys
 end
 
 --- Number of entries in a map-like table.
 ---@param tbl table
 ---@return integer
 function M.count(tbl)
-    local n = 0
-    for _ in pairs(tbl) do
-        n = n + 1
-    end
-    return n
+  local n = 0
+  for _ in pairs(tbl) do
+    n = n + 1
+  end
+  return n
 end
 
 --- Shell-quote an argument for *display* purposes (copyable commands shown to
@@ -628,20 +628,20 @@ end
 ---@param arg string
 ---@return string
 function M.quote(arg)
-    if arg:match("^[%w@%%_%-%+=:,%./]+$") then
-        return arg
-    end
-    return "'" .. arg:gsub("'", [['\'']]) .. "'"
+  if arg:match("^[%w@%%_%-%+=:,%./]+$") then
+    return arg
+  end
+  return "'" .. arg:gsub("'", [['\'']]) .. "'"
 end
 
 ---@param argv string[]
 ---@return string
 function M.join_argv(argv)
-    local parts = {}
-    for _, arg in ipairs(argv) do
-        parts[#parts + 1] = M.quote(arg)
-    end
-    return table.concat(parts, " ")
+  local parts = {}
+  for _, arg in ipairs(argv) do
+    parts[#parts + 1] = M.quote(arg)
+  end
+  return table.concat(parts, " ")
 end
 
 return M
